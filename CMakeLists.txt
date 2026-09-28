@@ -53,22 +53,6 @@ foreach(dir IN LISTS LLVM_INCLUDE_DIRS CLANG_INCLUDE_DIRS)
   target_compile_options(llvm_clang_includes INTERFACE -idirafter${dir})
 endforeach()
 
-add_library(path_format_fixer_lib STATIC
-  src/path_format_fixer/PathFormatFixer.cpp
-  src/path_format_fixer/PathFormatFixer.hpp
-)
-target_include_directories(path_format_fixer_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_compile_definitions(path_format_fixer_lib PRIVATE ${LLVM_DEFINITIONS})
-target_link_libraries(path_format_fixer_lib
-  PRIVATE
-    ${CLANG_TOOLING_LIBS}
-    llvm_clang_includes
-)
-
-add_executable(path_format_fixer src/path_format_fixer/path_format_fixer.cpp)
-target_compile_definitions(path_format_fixer PRIVATE ${LLVM_DEFINITIONS})
-target_link_libraries(path_format_fixer PRIVATE path_format_fixer_lib llvm_clang_includes)
-
 add_library(recurring_static_message_check_lib STATIC
   src/recurring_static_message_check/RecurringStaticMessageCheck.cpp
   src/recurring_static_message_check/RecurringStaticMessageCheck.hpp
@@ -114,8 +98,7 @@ add_executable(find_unused_members src/find_unused_members/FindUnusedMembers.cpp
 target_compile_definitions(find_unused_members PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(find_unused_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
 
-# See test/CMakeLists.txt's identical PATH_FORMAT_FIXER_TEST_CLANG_RESOURCE_DIR: ClangTool
-# invokes the frontend library directly (not the `clang` driver binary), so it doesn't
+# ClangTool invokes the frontend library directly (not the `clang` driver binary), so it doesn't
 # infer a resource-dir (builtin headers like stdarg.h) from this executable's own install
 # location the way the driver would -- ask the actual compiler for its resource dir.
 execute_process(
@@ -149,7 +132,6 @@ if(BUILD_TESTING)
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}")
   list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}")
 
-  find_package(fmt REQUIRED)
   find_package(GTest REQUIRED)
 
   enable_testing()
@@ -182,7 +164,6 @@ if(WIN32)
 endif()
 
 install(TARGETS
-  path_format_fixer
   recurring_static_message_check
   mixed_indexing_check
   find_unused_members

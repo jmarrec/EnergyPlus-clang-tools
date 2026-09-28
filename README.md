@@ -2,12 +2,6 @@
 
 Small Clang LibTooling-based refactoring tools that either check or rewrites EnergyPlus C++ Source code.
 
-## [path_format_fixer](src/path_format_fixer)
-
-It finds calls to EnergyPlus::format/fmt::format/std::format that pass a std::filesystem::path::string()/generic_string() argument, drops the redundant .string()/.generic_string() call (inserting a `{:g}` format spec when needed for generic_string), and normalizes the call itself onto std::format
-
-There is a gtest suite covering the AST-matching and rewrite logic.
-
 ## [recurring_static_message_check](src/recurring_static_message_check)
 
 Flags calls to the recurring-error functions (eg `ShowRecurringWarningErrorAtEnd`) whose message argument is built exclusively from string literals, with no identifier (variable/member) reference anywhere in it -- however that reference could have snuck in (`+` concatenation, a `std::format`/`fmt::format` argument, etc). The check function names to look for are passed on the command line and may be repeated.
@@ -48,7 +42,7 @@ Using **conan >= 2.0**:
 pip install conan
 ```
 
-Install conan dependencies and create toolchain file. Needed only to have `gtest` and `fmt` for the tests.
+Install conan dependencies and create toolchain file. Needed only to have `gtest` for the tests.
 
 ```bash
 cat ~/.conan2/profiles/clang
@@ -71,8 +65,7 @@ export CC=/usr/bin/clang-20
 export CXX=/usr/bin/clang++-20
 conan install . --output-folder=./build --build=missing -c tools.cmake.cmaketoolchain:generator=Ninja \
   -s compiler.cppstd=20 -s build_type=Release \
-  --profile:all clang \
-  -c tools.build:cxxflags="['-Wno-deprecated-literal-operator', '-DFMT_CONSTEVAL=']"
+  --profile:all clang
 ```
 
 Build using conan-presets
