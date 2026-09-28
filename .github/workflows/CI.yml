@@ -3,6 +3,9 @@ name: C++ CI
 on:
   push:
     branches: [ main ]
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
   pull_request:
     branches: [ main ]
 
@@ -14,6 +17,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-26.04
+    permissions:
+      contents: write
 
     steps:
 
@@ -28,6 +33,19 @@ jobs:
     - name: Build
       working-directory: ./build
       run: |
-        cmake -G Ninja -DCMAKE_BUILD_TYPE:BOOL=Release ..
-        ninja
-        ls Products/
+        cmake -G Ninja -DCMAKE_BUILD_TYPE:BOOL=Release \
+          -DCPACK_BINARY_TGZ:BOOL=ON -DCPACK_BINARY_STGZ:BOOL=OFF -DCPACK_BINARY_TZ:BOOL=OFF \
+          ..
+        ninja package
+
+    - name: Archive TGZ artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: EnergyPlus-clang-tools-${{ github.sha }}.tar.gz
+        path: build/EnergyPlus-clang-tools-*.tar.gz
+
+    - name: Upload Binary installer to release
+      if: contains(github.ref, 'refs/tags')
+      uses: softprops/action-gh-release@v3
+      with:
+        files: build/EnergyPlus-clang-tools-*.tar.gz

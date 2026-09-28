@@ -156,3 +156,38 @@ if(BUILD_TESTING)
 
   add_subdirectory(test)
 endif()
+
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+
+# eg 'Linux-Ubuntu26.04-x86_64' instead of CPack's bare default 'Linux'. lsb_release
+# isn't guaranteed to be installed everywhere, so fall back to just OS-arch if missing.
+set(CPACK_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+if(UNIX AND NOT APPLE)
+  find_program(LSB_RELEASE_EXEC lsb_release)
+  if(LSB_RELEASE_EXEC)
+    execute_process(COMMAND "${LSB_RELEASE_EXEC}" -is OUTPUT_VARIABLE LSB_RELEASE_ID OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${LSB_RELEASE_EXEC}" -rs OUTPUT_VARIABLE LSB_RELEASE_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(CPACK_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}-${LSB_RELEASE_ID}${LSB_RELEASE_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
+  endif()
+endif()
+
+message(STATUS "Installer name is set to '${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_SYSTEM_NAME}'")
+
+set(LIB_DESTINATION_DIR "lib")
+if(WIN32)
+  # No Rpaths on Windows
+  set(LIB_DESTINATION_DIR "bin")
+endif()
+
+install(TARGETS
+  path_format_fixer
+  recurring_static_message_check
+  mixed_indexing_check
+  find_unused_members
+  EnergyPlusTidyModule
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION ${LIB_DESTINATION_DIR}
+)
+
+include(CPack)
