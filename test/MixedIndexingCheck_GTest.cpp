@@ -58,14 +58,14 @@ flaggedVars(llvm::StringRef Code,
 TEST(MixedIndexingCheck, FlagsVariableUsedBothWays) {
   EXPECT_EQ(flaggedVars(wrap(R"(  int i = 0;
   a(i);
-  v[i];
+  (void)v[i];
 )")),
             std::vector<std::string>{"i"});
 }
 
 TEST(MixedIndexingCheck, IgnoresVariableUsedOnlyAsSubscript) {
   EXPECT_TRUE(flaggedVars(wrap(R"(  int i = 0;
-  v[i];
+  (void)v[i];
 )")).empty());
 }
 
@@ -79,7 +79,7 @@ TEST(MixedIndexingCheck, IgnoresAdditiveAdjustedIndex) {
   // `i + 1`/`i - 1` is a deliberate convention-mismatch adjustment, not co-mingled use.
   EXPECT_TRUE(flaggedVars(wrap(R"(  int i = 0;
   a(i + 1);
-  v[i];
+  (void)v[i];
 )")).empty());
 }
 
@@ -92,7 +92,7 @@ struct Array1D {
 void demo(std::map<int, int> &m, Array1D &a) {
   int i = 0;
   a(i);
-  m[i];
+  (void)m[i];
 }
 )cpp")
                   .empty());
@@ -111,7 +111,7 @@ struct Widget {
 void demo(Widget &w) {
   int i = 0;
   w.a(i);
-  w.compPointer[i];
+  (void)w.compPointer[i];
 }
 )cpp";
 
