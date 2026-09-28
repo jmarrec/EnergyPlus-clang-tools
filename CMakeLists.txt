@@ -5,7 +5,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Do not enable compiler specific extensions, for eg on GCC use -std=c++1z (=c++17) and not -std=gnu++17
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-project(path_format_fixer CXX C)
+project(EnergyPlus-clang-tools
+  VERSION 0.0.1
+  LANGUAGES CXX C
+)
 
 ###############################################################################
 #                         C M A K E    C O N T R O L                          #
@@ -51,9 +54,10 @@ foreach(dir IN LISTS LLVM_INCLUDE_DIRS CLANG_INCLUDE_DIRS)
 endforeach()
 
 add_library(path_format_fixer_lib STATIC
-  PathFormatFixer.cpp
-  PathFormatFixer.hpp
+  src/path_format_fixer/PathFormatFixer.cpp
+  src/path_format_fixer/PathFormatFixer.hpp
 )
+target_include_directories(path_format_fixer_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_definitions(path_format_fixer_lib PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(path_format_fixer_lib
   PRIVATE
@@ -61,13 +65,13 @@ target_link_libraries(path_format_fixer_lib
     llvm_clang_includes
 )
 
-add_executable(path_format_fixer path_format_fixer.cpp)
+add_executable(path_format_fixer src/path_format_fixer/path_format_fixer.cpp)
 target_compile_definitions(path_format_fixer PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(path_format_fixer PRIVATE path_format_fixer_lib llvm_clang_includes)
 
 add_library(recurring_static_message_check_lib STATIC
-  RecurringStaticMessageCheck.cpp
-  RecurringStaticMessageCheck.hpp
+  src/recurring_static_message_check/RecurringStaticMessageCheck.cpp
+  src/recurring_static_message_check/RecurringStaticMessageCheck.hpp
 )
 target_compile_definitions(recurring_static_message_check_lib PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(recurring_static_message_check_lib
@@ -76,14 +80,15 @@ target_link_libraries(recurring_static_message_check_lib
     llvm_clang_includes
 )
 
-add_executable(recurring_static_message_check recurring_static_message_check.cpp)
+add_executable(recurring_static_message_check src/recurring_static_message_check/recurring_static_message_check.cpp)
 target_compile_definitions(recurring_static_message_check PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(recurring_static_message_check PRIVATE recurring_static_message_check_lib llvm_clang_includes)
 
 add_library(mixed_indexing_check_lib STATIC
-  MixedIndexingCheck.cpp
-  MixedIndexingCheck.hpp
+  src/mixed_indexing_check/MixedIndexingCheck.cpp
+  src/mixed_indexing_check/MixedIndexingCheck.hpp
 )
+target_include_directories(mixed_indexing_check_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # Also statically linked into EnergyPlusTidyModule (a MODULE/shared-object target below),
 # which requires every object going into it to be position-independent -- without this,
 # linking that .so fails with "can not be used when making a shared object; recompile with
@@ -96,7 +101,7 @@ target_link_libraries(mixed_indexing_check_lib
     llvm_clang_includes
 )
 
-add_executable(mixed_indexing_check mixed_indexing_check.cpp)
+add_executable(mixed_indexing_check src/mixed_indexing_check/mixed_indexing_check.cpp)
 target_compile_definitions(mixed_indexing_check PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(mixed_indexing_check PRIVATE mixed_indexing_check_lib llvm_clang_includes)
 
@@ -104,7 +109,7 @@ target_link_libraries(mixed_indexing_check PRIVATE mixed_indexing_check_lib llvm
 # AllTUsToolExecutor (real per-TU-thread-pool parallelism, unlike
 # dead_member_check's single-threaded ClangTool loop above). Single-file, no
 # _lib split like the others -- nothing else links against its internals.
-add_executable(find_unused_members FindUnusedMembers.cpp)
+add_executable(find_unused_members src/find_unused_members/FindUnusedMembers.cpp)
 target_compile_definitions(find_unused_members PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(find_unused_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
 
@@ -128,7 +133,7 @@ unset(TOOLING_CLANG_RESOURCE_DIR)
 # dlopen()'d into a clang-tidy process that already has all of those linked in.
 # mixed_indexing_check_lib IS linked in (unlike the clang/clangTidy libs): it's our own
 # code with no ManagedStatic/cl::opt/registry globals to duplicate.
-add_library(EnergyPlusTidyModule MODULE EnergyPlusTidyModule.cpp)
+add_library(EnergyPlusTidyModule MODULE src/tidy_module/EnergyPlusTidyModule.cpp)
 target_compile_definitions(EnergyPlusTidyModule PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(EnergyPlusTidyModule PRIVATE mixed_indexing_check_lib llvm_clang_includes)
 set_target_properties(EnergyPlusTidyModule PROPERTIES PREFIX "")

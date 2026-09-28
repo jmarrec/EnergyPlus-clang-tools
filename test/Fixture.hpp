@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../PathFormatFixer.hpp"
+#include "path_format_fixer/PathFormatFixer.hpp"
 
 #include <string>
 #include <vector>

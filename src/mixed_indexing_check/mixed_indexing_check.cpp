@@ -1,4 +1,4 @@
-#include "MixedIndexingCheck.hpp"
+#include "mixed_indexing_check/MixedIndexingCheck.hpp"
 
 #include "clang/Tooling/ArgumentsAdjusters.h"
 #include "clang/Tooling/CommonOptionsParser.h"

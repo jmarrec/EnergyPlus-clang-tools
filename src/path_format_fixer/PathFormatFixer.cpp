@@ -1,4 +1,4 @@
-#include "PathFormatFixer.hpp"
+#include "path_format_fixer/PathFormatFixer.hpp"
 
 #include "clang/Lex/Lexer.h"
 #include "clang/Tooling/Tooling.h"

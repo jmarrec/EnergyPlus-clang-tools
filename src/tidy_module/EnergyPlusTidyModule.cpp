@@ -25,7 +25,7 @@
 // `--list-checks` would silently never show it. Symbols instead resolve against the host
 // process at load time (see CMakeLists.txt's `-undefined dynamic_lookup` on this target).
 
-#include "MixedIndexingCheck.hpp"
+#include "mixed_indexing_check/MixedIndexingCheck.hpp"
 
 #include "clang-tidy/ClangTidyCheck.h"
 #include "clang-tidy/ClangTidyModule.h"

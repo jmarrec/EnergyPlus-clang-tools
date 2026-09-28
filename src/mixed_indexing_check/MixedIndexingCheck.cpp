@@ -1,4 +1,4 @@
-#include "MixedIndexingCheck.hpp"
+#include "mixed_indexing_check/MixedIndexingCheck.hpp"
 
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Diagnostic.h"

@@ -1,6 +1,6 @@
 # EnergyPlus-fmt-clang-refactoring
 
-Small Clang LibTooling-based refactoring tools that rewrites EnergyPlus C++ Source code.
+Small Clang LibTooling-based refactoring tools that either check or rewrites EnergyPlus C++ Source code.
 
 ## path_format_fixer
 
