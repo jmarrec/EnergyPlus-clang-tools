@@ -29,6 +29,7 @@
 
 #include "clang-tidy/ClangTidyCheck.h"
 #include "clang-tidy/ClangTidyModule.h"
+#include "clang-tidy/ClangTidyModuleRegistry.h"
 
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"

@@ -84,6 +84,11 @@ add_library(mixed_indexing_check_lib STATIC
   MixedIndexingCheck.cpp
   MixedIndexingCheck.hpp
 )
+# Also statically linked into EnergyPlusTidyModule (a MODULE/shared-object target below),
+# which requires every object going into it to be position-independent -- without this,
+# linking that .so fails with "can not be used when making a shared object; recompile with
+# -fPIC" on this lib's relocations.
+set_target_properties(mixed_indexing_check_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(mixed_indexing_check_lib PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(mixed_indexing_check_lib
   PRIVATE
@@ -94,6 +99,14 @@ target_link_libraries(mixed_indexing_check_lib
 add_executable(mixed_indexing_check mixed_indexing_check.cpp)
 target_compile_definitions(mixed_indexing_check PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(mixed_indexing_check PRIVATE mixed_indexing_check_lib llvm_clang_includes)
+
+# find_unused_members: a shared/reviewed dead-data-member finder using
+# AllTUsToolExecutor (real per-TU-thread-pool parallelism, unlike
+# dead_member_check's single-threaded ClangTool loop above). Single-file, no
+# _lib split like the others -- nothing else links against its internals.
+add_executable(find_unused_members FindUnusedMembers.cpp)
+target_compile_definitions(find_unused_members PRIVATE ${LLVM_DEFINITIONS})
+target_link_libraries(find_unused_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
 
 # See test/CMakeLists.txt's identical PATH_FORMAT_FIXER_TEST_CLANG_RESOURCE_DIR: ClangTool
 # invokes the frontend library directly (not the `clang` driver binary), so it doesn't
