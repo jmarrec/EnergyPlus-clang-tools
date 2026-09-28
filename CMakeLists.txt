@@ -73,6 +73,7 @@ add_library(recurring_static_message_check_lib STATIC
   src/recurring_static_message_check/RecurringStaticMessageCheck.cpp
   src/recurring_static_message_check/RecurringStaticMessageCheck.hpp
 )
+target_include_directories(recurring_static_message_check_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_definitions(recurring_static_message_check_lib PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(recurring_static_message_check_lib
   PRIVATE

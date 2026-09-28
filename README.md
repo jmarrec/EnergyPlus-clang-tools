@@ -70,7 +70,7 @@ os=Linux
 export CC=/usr/bin/clang-20
 export CXX=/usr/bin/clang++-20
 conan install . --output-folder=./build --build=missing -c tools.cmake.cmaketoolchain:generator=Ninja \
-  -s compiler.cppstd=20 -s build_type=Release
+  -s compiler.cppstd=20 -s build_type=Release \
   --profile:all clang \
   -c tools.build:cxxflags="['-Wno-deprecated-literal-operator', '-DFMT_CONSTEVAL=']"
 ```

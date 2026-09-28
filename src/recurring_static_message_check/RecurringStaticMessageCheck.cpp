@@ -35,6 +35,23 @@ public:
     SawIdentifierRef = true;
     return true;
   }
+
+  // A call's callee (eg the resolved `operator+` for string concatenation, or
+  // `std::format` itself) is a DeclRefExpr to a *function*, not a variable/member
+  // that could make the message vary between calls -- skip it and only walk the
+  // arguments, so eg `std::string("a") + "b"` is still recognized as pure literals.
+  bool TraverseCallExpr(CallExpr *Call) { return TraverseCallArguments(Call); }
+  bool TraverseCXXOperatorCallExpr(CXXOperatorCallExpr *Call) { return TraverseCallArguments(Call); }
+
+private:
+  bool TraverseCallArguments(CallExpr *Call) {
+    for (Expr *Arg : Call->arguments()) {
+      if (!TraverseStmt(Arg)) {
+        return false;
+      }
+    }
+    return true;
+  }
 };
 
 bool isStringLiteralOnly(const Expr *E) {

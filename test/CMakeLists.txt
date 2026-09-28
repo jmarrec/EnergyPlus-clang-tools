@@ -46,3 +46,15 @@ target_compile_definitions(path_format_fixer_test PRIVATE
 unset(_fmt_include_dir)
 
 gtest_discover_tests(path_format_fixer_test)
+
+add_executable(recurring_static_message_check_test
+    RecurringStaticMessageCheck_GTest.cpp
+)
+target_link_libraries(recurring_static_message_check_test
+    PRIVATE
+        recurring_static_message_check_lib
+        llvm_clang_includes
+        gtest::gtest
+)
+
+gtest_discover_tests(recurring_static_message_check_test)
