@@ -34,9 +34,16 @@ jobs:
       working-directory: ./build
       run: |
         cmake -G Ninja -DCMAKE_BUILD_TYPE:BOOL=Release \
+          -DBUILD_TESTING:BOOL=ON  \
           -DCPACK_BINARY_TGZ:BOOL=ON -DCPACK_BINARY_STGZ:BOOL=OFF -DCPACK_BINARY_TZ:BOOL=OFF \
           ..
         ninja package
+
+    - name: Run Tests
+      shell: bash
+      working-directory: ./build
+      run: |
+        ctest -j $(nproc) --output-on-failure
 
     - name: Archive TGZ artifact
       uses: actions/upload-artifact@v7

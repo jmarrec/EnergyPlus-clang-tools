@@ -7,7 +7,7 @@ target_link_libraries(clang_tools_test
         recurring_static_message_check_lib
         mixed_indexing_check_lib
         llvm_clang_includes
-        gtest::gtest
+        GTest::gtest_main
 )
 
 gtest_discover_tests(clang_tools_test)

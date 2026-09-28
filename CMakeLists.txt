@@ -127,12 +127,15 @@ endif()
 
 option(BUILD_TESTING "Build testing targets" OFF)
 if(BUILD_TESTING)
-  # Conan drops its generated Find/*Config.cmake modules in the build dir;
-  # make sure they're found ahead of CMake's bundled FindGTest.cmake.
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}")
-  list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}")
-
-  find_package(GTest REQUIRED)
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        063de7e9578f82b369302001269680b4b1553359 # v1.18.0
+  )
+  # For Windows: Prevent overriding the parent project's compiler/linker settings
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
 
   enable_testing()
   include(GoogleTest)
