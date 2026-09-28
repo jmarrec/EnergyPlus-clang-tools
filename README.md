@@ -2,11 +2,31 @@
 
 Small Clang LibTooling-based refactoring tools that either check or rewrites EnergyPlus C++ Source code.
 
-## path_format_fixer
+## [path_format_fixer](src/path_format_fixer)
 
 It finds calls to EnergyPlus::format/fmt::format/std::format that pass a std::filesystem::path::string()/generic_string() argument, drops the redundant .string()/.generic_string() call (inserting a `{:g}` format spec when needed for generic_string), and normalizes the call itself onto std::format
 
 There is a gtest suite covering the AST-matching and rewrite logic.
+
+## [recurring_static_message_check](src/recurring_static_message_check)
+
+Flags calls to the recurring-error functions (eg `ShowRecurringWarningErrorAtEnd`) whose message argument is built exclusively from string literals, with no identifier (variable/member) reference anywhere in it -- however that reference could have snuck in (`+` concatenation, a `std::format`/`fmt::format` argument, etc). The check function names to look for are passed on the command line and may be repeated.
+
+Also shipped as a clang-tidy check, `energyplus-recurring-static-message`, via [EnergyPlusTidyModule](src/tidy_module).
+
+## [mixed_indexing_check](src/mixed_indexing_check)
+
+Finds variables/members that get indexed both 0-based and 1-based within the same scope -- a common source of off-by-one bugs in EnergyPlus's mix of legacy 1-indexed and modern 0-indexed containers. Deliberately 1-indexed members (eg a `std::vector` resized to `N + 1` so `operator[]` can be used with a 1-based index) can be excluded via `--exclude-member Type::member`.
+
+Also shipped as a clang-tidy check, `energyplus-mixed-indexing`, via [EnergyPlusTidyModule](src/tidy_module).
+
+## [find_unused_members](src/find_unused_members)
+
+A dead-data-member finder built on `AllTUsToolExecutor` for real per-TU thread-pool parallelism (unlike the single-threaded `ClangTool` loop the other tools above use).
+
+## [EnergyPlusTidyModule](src/tidy_module)
+
+A clang-tidy plugin module (`clang-tidy --load=<this>.so -checks='-*,energyplus-*' ...`) bundling the `energyplus-recurring-static-message` and `energyplus-mixed-indexing` checks, reusing the AST-matching logic from `recurring_static_message_check` and `mixed_indexing_check` above.
 
 ## Building
 
