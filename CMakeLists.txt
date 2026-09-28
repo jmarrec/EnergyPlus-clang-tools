@@ -136,6 +136,7 @@ if(APPLE)
   target_link_options(EnergyPlusTidyModule PRIVATE -undefined dynamic_lookup)
 endif()
 
+option(BUILD_TESTING "Build testing targets" OFF)
 if(BUILD_TESTING)
   # Conan drops its generated Find/*Config.cmake modules in the build dir;
   # make sure they're found ahead of CMake's bundled FindGTest.cmake.

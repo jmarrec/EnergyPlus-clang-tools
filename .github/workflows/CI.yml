@@ -1,0 +1,31 @@
+name: C++ CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CC: clang-22
+  CXX: clang++-22
+
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    - name: Install dependencies
+      run: sudo apt-get install -y build-essential cmake
+
+    - name: Build
+      run: |
+        mkdir build
+        cd build
+        cmake -G Ninja -DCMAKE_BUILD_TYPE:BOOL=Release ..
+        ninja
+        ls Products/
