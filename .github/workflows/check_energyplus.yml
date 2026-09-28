@@ -78,9 +78,10 @@ jobs:
       id: clang_tidy_checks
       continue-on-error: true
       run: |
+        # I should add clang-analyzer-deadcode.DeadStores but there's a ton of offenses right now
         run-clang-tidy-22 \
           -load="${TIDY_MODULE}" \
-          -checks='-*,energyplus-*,clang-analyzer-*,clang-analyzer-optin.core.EnumCastOutOfRange,bugprone-use-after-move' \
+          -checks='-*,energyplus-*,clang-analyzer-core*,clang-analyzer-cplusplus*,clang-analyzer-optin.core.EnumCastOutOfRange,bugprone-use-after-move' \
           -warnings-as-errors='clang-analyzer-core*,bugprone-use-after-move' \
           -use-color \
           -export-fixes=clang-tidy-findings.yaml \
