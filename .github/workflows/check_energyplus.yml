@@ -1,0 +1,82 @@
+name: Check EnergyPlus
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'EnergyPlus branch or tag to check out'
+        required: false
+        default: 'develop'
+
+env:
+  CC: clang-22
+  CXX: clang++-22
+
+jobs:
+  check:
+    runs-on: ubuntu-26.04
+
+    steps:
+
+    - name: Download latest EnergyPlus-clang-tools release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p clang-tools
+        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir clang-tools --clobber
+        tar -xzf clang-tools/*.tar.gz -C clang-tools --strip-components=1
+        echo "$(pwd)/clang-tools/bin" >> "$GITHUB_PATH"
+
+    - name: Checkout EnergyPlus
+      uses: actions/checkout@v7
+      with:
+        repository: NatLabRockies/EnergyPlus
+        ref: ${{ inputs.ref }}
+        path: EnergyPlus
+
+    - name: Configure EnergyPlus
+      working-directory: ./EnergyPlus
+      run: |
+        mkdir build && cd build
+        echo "BUILD_DIR=$(pwd)" >> "$GITHUB_ENV"
+        cmake -G Ninja -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DENABLE_PCH:BOOL=ON \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON \
+          -DLINK_WITH_PYTHON:BOOL=OFF -DPYTHON_CLI:BOOL=OFF -DBUILD_TESTING:BOOL=OFF \
+          -DBUILD_FORTRAN:BOOL=OFF -DDOCUMENTATION_BUILD:STRING=DoNotBuild \
+          -DENABLE_OPENMP:BOOL=OFF \
+          ..
+        # Build the PCH
+        ninja src/EnergyPlus/CMakeFiles/energypluslib.dir/cmake_pch.hxx.pch
+
+    - name: Run recurring_static_message_check
+      id: recurring_static_message_check
+      continue-on-error: true
+      working-directory: ./EnergyPlus
+      run: |
+        jq -r '.[].file | select(contains("/src/EnergyPlus/") and (contains("/third_party/") | not))' ${BUILD_DIR}/compile_commands.json | \
+          xargs -P "$(nproc)" -I{} recurring_static_message_check -p ${BUILD_DIR} {}
+
+    - name: Run mixed_indexing_check
+      id: mixed_indexing_check
+      continue-on-error: true
+      working-directory: ./EnergyPlus
+      run: |
+        jq -r '.[].file | select(contains("/src/EnergyPlus/") and (contains("/third_party/") | not))' ${BUILD_DIR}/compile_commands.json | \
+          xargs -P "$(nproc)" -I{} mixed_indexing_check -p ${BUILD_DIR} {}
+
+    - name: Run find_unused_members
+      id: find_unused_members
+      continue-on-error: true
+      working-directory: ./EnergyPlus
+      run: |
+        find_unused_members -p ${BUILD_DIR} -j $(nproc)
+
+    - name: Fail if any check found something
+      if: |
+        steps.recurring_static_message_check.outcome == 'failure' ||
+        steps.mixed_indexing_check.outcome == 'failure' ||
+        steps.find_unused_members.outcome == 'failure'
+      run: |
+        echo "One or more checks reported findings; see the failed steps above."
+        exit 1
