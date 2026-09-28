@@ -62,7 +62,7 @@ jobs:
         ninja src/EnergyPlus/CMakeFiles/energypluslib.dir/cmake_pch.hxx.pch
 
     # Running the individual executables is slower than running both of them at the same time via clang-tidy
-    # (mixed_indexing_check took 9m41s, recurring_static_message_check 9m37s)
+    # (mixed_indexing_check took 9m41s, recurring_static_message_check 9m37s. Running both via clang-tidy took 4min2s)
     - name: Run energyplus-* clang-tidy checks
       id: clang_tidy_checks
       continue-on-error: true
