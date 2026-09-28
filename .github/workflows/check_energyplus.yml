@@ -73,13 +73,15 @@ jobs:
 
     # Running the individual executables is slower than running both of them at the same time via clang-tidy
     # (mixed_indexing_check took 9m41s, recurring_static_message_check 9m37s. Running both via clang-tidy took 4min2s)
+    # In addition, we add some unambiguous built-in checkers, which costs a lot but should be worth it
     - name: Run energyplus-* clang-tidy checks
       id: clang_tidy_checks
       continue-on-error: true
       run: |
         run-clang-tidy-22 \
           -load="${TIDY_MODULE}" \
-          -checks='-*,energyplus-*' \
+          -checks='-*,energyplus-*,clang-analyzer-*,clang-analyzer-optin.core.EnumCastOutOfRange,bugprone-use-after-move' \
+          -warnings-as-errors='clang-analyzer-core*,bugprone-use-after-move' \
           -use-color \
           -export-fixes=clang-tidy-findings.yaml \
           -p "${BUILD_DIR}" \
