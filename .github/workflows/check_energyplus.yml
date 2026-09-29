@@ -26,17 +26,19 @@ jobs:
         begin_group() { echo -e "::group::\033[93m$1\033[0m"; }
 
         begin_group "Downloading EnergyPlus-clang-tools"
-        mkdir -p clang-tools
-        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir clang-tools --clobber
-        tar -xzf clang-tools/*.tar.gz -C clang-tools --strip-components=1
-        echo "$(pwd)/clang-tools/bin" >> "$GITHUB_PATH"
+        # Not in the workspace, so that a checkout into it can never wipe the tools
+        CLANG_TOOLS_DIR="${RUNNER_TEMP}/clang-tools"
+        mkdir -p "${CLANG_TOOLS_DIR}"
+        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir "${CLANG_TOOLS_DIR}" --clobber
+        tar -xzf "${CLANG_TOOLS_DIR}"/*.tar.gz -C "${CLANG_TOOLS_DIR}" --strip-components=1
+        echo "${CLANG_TOOLS_DIR}/bin" >> "$GITHUB_PATH"
         echo "::endgroup::"
 
         begin_group "Checking EnergyPlusTidyModule.so"
-        TIDY_MODULE="$(pwd)/clang-tools/lib/EnergyPlusTidyModule.so"
+        TIDY_MODULE="${CLANG_TOOLS_DIR}/lib/EnergyPlusTidyModule.so"
         echo "TIDY_MODULE=${TIDY_MODULE}" >> "$GITHUB_ENV"
         echo "Listing available energyplus-* checks:"
-        clang-tidy-20 --load=${TIDY_MODULE} --list-checks -checks='-*,energyplus-*'
+        clang-tidy-22 --load=${TIDY_MODULE} --list-checks -checks='-*,energyplus-*'
         echo "::endgroup::"
 
     - name: Checkout EnergyPlus
@@ -72,9 +74,18 @@ jobs:
           -load="${TIDY_MODULE}" \
           -checks='-*,energyplus-*' \
           -use-color \
+          -export-fixes="${GITHUB_WORKSPACE}/clang-tidy-findings.yaml" \
           -p "${BUILD_DIR}" \
           -j "$(nproc)" \
           src/EnergyPlus/
+
+    - name: Upload clang-tidy findings
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: clang-tidy-findings
+        path: clang-tidy-findings.yaml
+        if-no-files-found: ignore
 
     - name: Run find_unused_members
       id: find_unused_members
@@ -83,6 +94,19 @@ jobs:
       run: |
         find_unused_members -p ${BUILD_DIR} -j $(nproc)
 
+    - name: Summarize
+      if: always()
+      env:
+        CLANG_TIDY_OUTCOME: ${{ steps.clang_tidy_checks.outcome }}
+        FIND_UNUSED_MEMBERS_OUTCOME: ${{ steps.find_unused_members.outcome }}
+      run: |
+        {
+          echo "### EnergyPlus Static Analysis"
+          echo "- energyplus-* clang-tidy checks: ${CLANG_TIDY_OUTCOME}"
+          echo "- find_unused_members: ${FIND_UNUSED_MEMBERS_OUTCOME}"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # Both checks above are continue-on-error so that they all get to run; fail the job here
     - name: Fail if any check found something
       if: |
         steps.clang_tidy_checks.outcome == 'failure' ||
