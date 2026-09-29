@@ -87,6 +87,13 @@ jobs:
         path: clang-tidy-findings.yaml
         if-no-files-found: ignore
 
+    # The findings file is only written when run-clang-tidy got as far as exporting fixes
+    - name: Summarize clang-tidy findings
+      if: always() && hashFiles('clang-tidy-findings.yaml') != ''
+      run: |
+        sudo apt-get install -y --no-install-recommends python3-yaml python3-tabulate
+        summarize_clang_tidy_findings.py clang-tidy-findings.yaml
+
     - name: Run find_unused_members
       id: find_unused_members
       continue-on-error: true
