@@ -599,5 +599,5 @@ int main(int argc, const char **argv) {
                << " after filters\n"
                << "Treat findings as candidates and validate them against "
                   "other build configurations.\n";
-  return 0;
+  return displayed > 0 ? 1 : 0;
 }
