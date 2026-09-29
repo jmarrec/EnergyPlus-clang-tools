@@ -34,6 +34,17 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCPACK_BINARY_TGZ:BOOL=ON -DCPACK_BINARY_STGZ:BOOL=OFF -DCPACK_BINARY_TZ:BOOL=OFF
 ```
 
+On MacOS:
+
+```
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING:BOOL=OFF \
+  -DCPACK_BINARY_TGZ:BOOL=ON -DCPACK_BINARY_STGZ:BOOL=OFF -DCPACK_BINARY_TZ:BOOL=OFF \
+  -DCMAKE_PREFIX_PATH:PATH=/opt/homebrew/opt/llvm \
+  -DCMAKE_C_COMPILER:PATH=/opt/homebrew/opt/llvm/bin/clang-23 \
+  -DCMAKE_CXX_COMPILER:PATH=/opt/homebrew/opt/llvm/bin/clang++ \
+  ..
+```
+
 ### With tests
 
 `googletest` is fetched automatically via CMake's `FetchContent` when `BUILD_TESTING:BOOL=ON` -- no separate dependency install step needed.

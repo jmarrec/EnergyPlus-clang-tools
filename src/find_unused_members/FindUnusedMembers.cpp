@@ -3,7 +3,12 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendAction.h"
+// Moved out of clang/Index in LLVM 23 (same clang::index namespace).
+#if __has_include("clang/UnifiedSymbolResolution/USRGeneration.h")
+#include "clang/UnifiedSymbolResolution/USRGeneration.h"
+#else
 #include "clang/Index/USRGeneration.h"
+#endif
 #include "clang/Tooling/AllTUsExecution.h"
 #include "clang/Tooling/ArgumentsAdjusters.h"
 #include "clang/Tooling/CompilationDatabase.h"

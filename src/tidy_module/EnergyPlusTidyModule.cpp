@@ -29,7 +29,14 @@
 
 #include "clang-tidy/ClangTidyCheck.h"
 #include "clang-tidy/ClangTidyModule.h"
+
+#include "llvm/Config/llvm-config.h"
+
+// ClangTidyModuleRegistry.h's symbols were merged into ClangTidyModule.h (included above) in
+// LLVM 22; only include the standalone header pre-22, where it's still required.
+#if LLVM_VERSION_MAJOR < 22
 #include "clang-tidy/ClangTidyModuleRegistry.h"
+#endif
 
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
