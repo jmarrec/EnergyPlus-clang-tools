@@ -48,3 +48,12 @@ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING:BOOL=OFF \
 ### With tests
 
 `googletest` is fetched automatically via CMake's `FetchContent` when `BUILD_TESTING:BOOL=ON` -- no separate dependency install step needed.
+
+## Releasing
+
+The version lives in `CMakeLists.txt` and is bumped with [bump2version](https://github.com/c4urself/bump2version) (config in `.bumpversion.cfg`), which also commits and tags:
+
+```bash
+bump2version patch  # or minor / major
+git push --follow-tags
+```
