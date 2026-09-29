@@ -34,7 +34,7 @@ def sumarize_counts(output_yml_path: Path) -> list[tuple[str, int]]:
         raise FileNotFoundError(f"{output_yml_path} not found. Please run clang-tidy first.")
 
     with output_yml_path.open() as f:
-        data = yaml.safe_load(f)
+        data = yaml.safe_load(f) or {}
 
     diags = data.get("Diagnostics", []) or []
     c = collections.Counter(d["DiagnosticName"] for d in diags)
@@ -49,8 +49,13 @@ if __name__ == "__main__":
         description="Summarize clang-tidy diagnostic counts from a YAML export-fixes file."
     )
     parser.add_argument("output_yml_path", type=existing_file, help="Path to the clang-tidy --export-fixes YAML file")
+    parser.add_argument(
+        "--title",
+        default="Clang-Tidy Diagnostic Summary",
+        help="Heading of the summary, e.g. the name of the step that produced the YAML file",
+    )
     args = parser.parse_args()
 
     table = sumarize_counts(output_yml_path=args.output_yml_path)
-    write_step_summary(msg="## Clang-Tidy Diagnostic Summary\n")
+    write_step_summary(msg=f"## {args.title}\n")
     write_step_summary(msg=tabulate(table, headers=["Diagnostic Name", "Count"], tablefmt="github") + "\n")
