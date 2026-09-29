@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 project(EnergyPlus-clang-tools
-  VERSION 0.0.1
+  VERSION 0.0.2
   LANGUAGES CXX C
 )
 
