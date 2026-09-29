@@ -1,0 +1,50 @@
+repos:
+- repo: https://github.com/Lucas-C/pre-commit-hooks
+  rev: v1.5.6
+  hooks:
+    - id: forbid-crlf
+    - id: remove-crlf
+
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+    - id: check-builtin-literals
+    - id: check-added-large-files
+    - id: check-case-conflict
+    - id: check-merge-conflict
+    - id: check-yaml
+      args: [ --unsafe ]
+    - id: debug-statements
+    - id: end-of-file-fixer
+    - id: forbid-submodules
+    - id: requirements-txt-fixer
+    - id: trailing-whitespace
+
+- repo: https://github.com/PyCQA/isort
+  rev: 9.0.2
+  hooks:
+    - id: isort
+      args: [ "--filter-files" ]
+
+- repo: https://github.com/psf/black-pre-commit-mirror
+  rev: 26.5.1
+  hooks:
+    - id: black
+      language_version: python3.12
+
+- repo: https://github.com/pycqa/flake8
+  rev: 7.3.0
+  hooks:
+    - id: flake8
+
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v2.3.1
+  hooks:
+    - id: mypy
+
+- repo: https://github.com/pre-commit/mirrors-clang-format
+  rev: 'v19.1.1'
+  hooks:
+    - id: clang-format
+      files: '.*\.(cpp|cc|c|hpp|hh|h)$'
+      args: ["-style=file", "--verbose"]

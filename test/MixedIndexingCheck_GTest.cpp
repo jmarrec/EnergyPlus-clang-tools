@@ -14,8 +14,8 @@ using namespace clang::tooling;
 
 namespace {
 
-// Wraps a snippet of `demo()` body code with the ObjexxFCL-ish/std container aliases the
-// check's operator()-vs-operator[] distinction cares about.
+// Wraps a snippet of `demo()` body code with the ObjexxFCL-ish/std container
+// aliases the check's operator()-vs-operator[] distinction cares about.
 std::string wrap(llvm::StringRef Body) {
   return (R"cpp(
 #include <vector>
@@ -25,28 +25,32 @@ struct Array1D {
 };
 
 void demo(std::vector<int> &v, Array1D &a) {
-)cpp" + Body.str()
-          + "}\n");
+)cpp" + Body.str() +
+          "}\n");
 }
 
-// Parses `Code`, finds the `demo` FunctionDecl, and returns the names findFlaggedVars()
-// reports for it.
-std::vector<std::string>
-flaggedVars(llvm::StringRef Code,
-            const std::vector<mixed_indexing_check::MemberExclusion> &Exclusions = mixed_indexing_check::defaultExclusions()) {
-  std::unique_ptr<ASTUnit> Unit = buildASTFromCodeWithArgs(Code, {"-std=c++20"});
+// Parses `Code`, finds the `demo` FunctionDecl, and returns the names
+// findFlaggedVars() reports for it.
+std::vector<std::string> flaggedVars(
+    llvm::StringRef Code,
+    const std::vector<mixed_indexing_check::MemberExclusion> &Exclusions =
+        mixed_indexing_check::defaultExclusions()) {
+  std::unique_ptr<ASTUnit> Unit =
+      buildASTFromCodeWithArgs(Code, {"-std=c++20"});
   if (!Unit) {
     return {};
   }
 
-  auto Matches = match(functionDecl(hasName("demo")).bind("func"), Unit->getASTContext());
+  auto Matches =
+      match(functionDecl(hasName("demo")).bind("func"), Unit->getASTContext());
   if (Matches.empty()) {
     return {};
   }
   const auto *Func = Matches.front().getNodeAs<FunctionDecl>("func");
 
   std::vector<std::string> Names;
-  for (const mixed_indexing_check::FlaggedVar &FV : mixed_indexing_check::findFlaggedVars(*Func, Exclusions)) {
+  for (const mixed_indexing_check::FlaggedVar &FV :
+       mixed_indexing_check::findFlaggedVars(*Func, Exclusions)) {
     Names.push_back(FV.Name);
   }
   std::sort(Names.begin(), Names.end());
@@ -66,21 +70,25 @@ TEST(MixedIndexingCheck, FlagsVariableUsedBothWays) {
 TEST(MixedIndexingCheck, IgnoresVariableUsedOnlyAsSubscript) {
   EXPECT_TRUE(flaggedVars(wrap(R"(  int i = 0;
   (void)v[i];
-)")).empty());
+)"))
+                  .empty());
 }
 
 TEST(MixedIndexingCheck, IgnoresVariableUsedOnlyAsCall) {
   EXPECT_TRUE(flaggedVars(wrap(R"(  int i = 0;
   a(i);
-)")).empty());
+)"))
+                  .empty());
 }
 
 TEST(MixedIndexingCheck, IgnoresAdditiveAdjustedIndex) {
-  // `i + 1`/`i - 1` is a deliberate convention-mismatch adjustment, not co-mingled use.
+  // `i + 1`/`i - 1` is a deliberate convention-mismatch adjustment, not
+  // co-mingled use.
   EXPECT_TRUE(flaggedVars(wrap(R"(  int i = 0;
   a(i + 1);
   (void)v[i];
-)")).empty());
+)"))
+                  .empty());
 }
 
 TEST(MixedIndexingCheck, IgnoresAssociativeContainerSubscript) {

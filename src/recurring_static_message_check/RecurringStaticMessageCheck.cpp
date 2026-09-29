@@ -37,11 +37,14 @@ public:
   }
 
   // A call's callee (eg the resolved `operator+` for string concatenation, or
-  // `std::format` itself) is a DeclRefExpr to a *function*, not a variable/member
-  // that could make the message vary between calls -- skip it and only walk the
-  // arguments, so eg `std::string("a") + "b"` is still recognized as pure literals.
+  // `std::format` itself) is a DeclRefExpr to a *function*, not a
+  // variable/member that could make the message vary between calls -- skip it
+  // and only walk the arguments, so eg `std::string("a") + "b"` is still
+  // recognized as pure literals.
   bool TraverseCallExpr(CallExpr *Call) { return TraverseCallArguments(Call); }
-  bool TraverseCXXOperatorCallExpr(CXXOperatorCallExpr *Call) { return TraverseCallArguments(Call); }
+  bool TraverseCXXOperatorCallExpr(CXXOperatorCallExpr *Call) {
+    return TraverseCallArguments(Call);
+  }
 
 private:
   bool TraverseCallArguments(CallExpr *Call) {
@@ -56,8 +59,9 @@ private:
 
 bool isStringLiteralOnly(const Expr *E) {
   IdentifierHunter Hunter;
-  // RecursiveASTVisitor::TraverseStmt() only takes a non-const Stmt*; it never mutates
-  // the AST, so this is the standard, safe pattern for a read-only visitor in clang tooling.
+  // RecursiveASTVisitor::TraverseStmt() only takes a non-const Stmt*; it never
+  // mutates the AST, so this is the standard, safe pattern for a read-only
+  // visitor in clang tooling.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
   Hunter.TraverseStmt(const_cast<Expr *>(E));
   return Hunter.SawStringLiteral && !Hunter.SawIdentifierRef;
@@ -65,9 +69,13 @@ bool isStringLiteralOnly(const Expr *E) {
 
 } // namespace
 
-StatementMatcher makeMatcher(const std::vector<std::string> &RecurringFunctionNames) {
-  std::vector<StringRef> Names(RecurringFunctionNames.begin(), RecurringFunctionNames.end());
-  return callExpr(callee(functionDecl(hasAnyName(Names))), argumentCountAtLeast(2)).bind("call");
+StatementMatcher
+makeMatcher(const std::vector<std::string> &RecurringFunctionNames) {
+  std::vector<StringRef> Names(RecurringFunctionNames.begin(),
+                               RecurringFunctionNames.end());
+  return callExpr(callee(functionDecl(hasAnyName(Names))),
+                  argumentCountAtLeast(2))
+      .bind("call");
 }
 
 void Callback::run(const MatchFinder::MatchResult &Result) {

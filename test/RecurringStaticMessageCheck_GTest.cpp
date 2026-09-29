@@ -10,30 +10,35 @@ using namespace clang::tooling;
 
 namespace {
 
-// Wraps a snippet of `demo()` body code, with a stub `ShowRecurringWarningErrorAtEnd`
-// matching the real signature's shape closely enough for the matcher: a leading `state`
-// argument, then the message at index 1.
+// Wraps a snippet of `demo()` body code, with a stub
+// `ShowRecurringWarningErrorAtEnd` matching the real signature's shape closely
+// enough for the matcher: a leading `state` argument, then the message at
+// index 1.
 std::string wrap(llvm::StringRef Body) {
   return (R"cpp(
 #include <string>
 struct EnergyPlusState {};
 void ShowRecurringWarningErrorAtEnd(EnergyPlusState &state, const std::string &msg, int *idx) {}
 void demo(EnergyPlusState &state, const std::string &name) {
-)cpp" + Body.str()
-          + "}\n");
+)cpp" + Body.str() +
+          "}\n");
 }
 
 // Runs recurring_static_message_check on in-memory `Code` and returns whether
 // the check fired for any call.
 bool checkTriggers(llvm::StringRef Code,
-                    const std::vector<std::string> &RecurringFunctionNames = {"ShowRecurringWarningErrorAtEnd"}) {
+                   const std::vector<std::string> &RecurringFunctionNames = {
+                       "ShowRecurringWarningErrorAtEnd"}) {
   recurring_static_message_check::Callback Callback;
 
   MatchFinder Finder;
-  Finder.addMatcher(recurring_static_message_check::makeMatcher(RecurringFunctionNames), &Callback);
+  Finder.addMatcher(
+      recurring_static_message_check::makeMatcher(RecurringFunctionNames),
+      &Callback);
 
   std::vector<std::string> Args = {"-std=c++20"};
-  runToolOnCodeWithArgs(newFrontendActionFactory(&Finder)->create(), Code, Args, "input.cc");
+  runToolOnCodeWithArgs(newFrontendActionFactory(&Finder)->create(), Code, Args,
+                        "input.cc");
 
   return Callback.foundAny();
 }

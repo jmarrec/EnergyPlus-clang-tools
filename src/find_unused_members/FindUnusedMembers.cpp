@@ -443,7 +443,8 @@ bool matches(const std::optional<std::regex> &expression,
 // both back to non-fatal warnings -- the GCC PCH then just gets ignored and
 // cmake_pch.hxx reparsed as a normal header, slower but correct.
 clang::tooling::ArgumentsAdjuster makeArgumentsAdjuster() {
-  return [](const clang::tooling::CommandLineArguments &args, llvm::StringRef /*filename*/) {
+  return [](const clang::tooling::CommandLineArguments &args,
+            llvm::StringRef /*filename*/) {
     clang::tooling::CommandLineArguments result;
     for (const std::string &arg : args) {
       if (arg != "-Werror") {
@@ -491,8 +492,11 @@ int main(int argc, const char **argv) {
                << " translation units with " << options->jobs << " jobs\n";
   Findings findings(options->sourceRoot);
   clang::tooling::AllTUsToolExecutor executor(filteredDatabase, options->jobs);
-  std::vector<std::pair<std::unique_ptr<clang::tooling::FrontendActionFactory>, clang::tooling::ArgumentsAdjuster>> actions;
-  actions.emplace_back(std::make_unique<MemberActionFactory>(findings), makeArgumentsAdjuster());
+  std::vector<std::pair<std::unique_ptr<clang::tooling::FrontendActionFactory>,
+                        clang::tooling::ArgumentsAdjuster>>
+      actions;
+  actions.emplace_back(std::make_unique<MemberActionFactory>(findings),
+                       makeArgumentsAdjuster());
   if (llvm::Error error = executor.execute(actions)) {
     llvm::errs() << "error: Clang analysis failed: "
                  << llvm::toString(std::move(error)) << '\n';
