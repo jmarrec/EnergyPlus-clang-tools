@@ -1,0 +1,13 @@
+[tool.flake8]
+extend-ignore = [
+    "E203", # Whitespace before ":" - sometimes this is helpful, as in df.loc[a : b]
+    "E501", # line too long: black will autofix this where possible
+]
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+
+[tool.isort]
+line_length = 120
+profile = "black"
