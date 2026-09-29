@@ -188,6 +188,13 @@ public:
       if (std::any_of(
               scanRoots.begin(), scanRoots.end(),
               [&](const fs::path &root) { return isWithin(file, root); })) {
+        // CMake's PCH support adds a synthetic TU that compiles cmake_pch.hxx
+        // itself (to generate the .pch/.gch); it has no real declarations to
+        // report and would just waste a parse if a --scan-root ever widens
+        // enough to catch it.
+        if (file.filename().string().rfind("cmake_pch", 0) == 0) {
+          continue;
+        }
         commands_.push_back(command);
         commandsByFile_.emplace(file.string(), command);
       }
@@ -238,6 +245,7 @@ std::string usrFor(const clang::Decl *declaration) {
 
 struct FieldInfo {
   std::string usr;
+  std::string name;
   std::string qualifiedName;
   std::string type;
   fs::path file;
@@ -276,6 +284,7 @@ public:
 
     const clang::PresumedLoc presumed = sourceManager.getPresumedLoc(location);
     FieldInfo info{usr,
+                   field->getNameAsString(),
                    field->getQualifiedNameAsString(),
                    field->getType().getAsString(),
                    file,
@@ -294,11 +303,46 @@ public:
     references_.insert(std::move(usr));
   }
 
+  // Template-dependent member accesses (this->member or Base::member inside a
+  // template, before instantiation) can't be resolved to a concrete FieldDecl,
+  // so recordReference() never sees them. Track the plain name instead and
+  // treat any by-name match as "used" -- conservative, but avoids flagging
+  // members that dependent lookup just couldn't confirm.
+  void recordUnresolvedReference(clang::DeclarationName name) {
+    if (name.isEmpty()) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    unresolvedReferenceNames_.insert(name.getAsString());
+  }
+
+  // Aggregate init (Foo f{1, 2, 3}), C++20 paren-list init, and structured
+  // bindings all reference every member positionally without ever naming it via
+  // a MemberExpr, so the visitor would otherwise never see those members as
+  // referenced.
+  void recordAggregateUse(clang::QualType type) {
+    type = type.getNonReferenceType();
+    const auto *record = type->getAsRecordDecl();
+    if (!record) {
+      return;
+    }
+    for (const auto *field : record->fields()) {
+      recordReference(field);
+    }
+    if (const auto *cxxRecord = llvm::dyn_cast<clang::CXXRecordDecl>(record)) {
+      for (const auto &base : cxxRecord->bases()) {
+        recordAggregateUse(base.getType());
+      }
+    }
+  }
+
   std::vector<FieldInfo> unusedFields() const {
     std::vector<FieldInfo> result;
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto &[usr, field] : declarations_) {
-      if (references_.find(usr) == references_.end()) {
+      if (references_.find(usr) == references_.end() &&
+          unresolvedReferenceNames_.find(field.name) ==
+              unresolvedReferenceNames_.end()) {
         result.push_back(field);
       }
     }
@@ -322,6 +366,7 @@ private:
   mutable std::mutex mutex_;
   std::unordered_map<std::string, FieldInfo> declarations_;
   std::unordered_set<std::string> references_;
+  std::unordered_set<std::string> unresolvedReferenceNames_;
 };
 
 class MemberVisitor final : public clang::RecursiveASTVisitor<MemberVisitor> {
@@ -341,6 +386,32 @@ public:
 
   bool VisitDeclRefExpr(clang::DeclRefExpr *expression) {
     recordNamedMember(expression->getDecl());
+    return true;
+  }
+
+  bool VisitCXXDependentScopeMemberExpr(
+      clang::CXXDependentScopeMemberExpr *expression) {
+    findings_.recordUnresolvedReference(expression->getMember());
+    return true;
+  }
+
+  bool VisitUnresolvedMemberExpr(clang::UnresolvedMemberExpr *expression) {
+    findings_.recordUnresolvedReference(expression->getMemberName());
+    return true;
+  }
+
+  bool VisitInitListExpr(clang::InitListExpr *expression) {
+    findings_.recordAggregateUse(expression->getType());
+    return true;
+  }
+
+  bool VisitCXXParenListInitExpr(clang::CXXParenListInitExpr *expression) {
+    findings_.recordAggregateUse(expression->getType());
+    return true;
+  }
+
+  bool VisitDecompositionDecl(clang::DecompositionDecl *declaration) {
+    findings_.recordAggregateUse(declaration->getType());
     return true;
   }
 
