@@ -135,6 +135,8 @@ if(BUILD_TESTING)
   )
   # For Windows: Prevent overriding the parent project's compiler/linker settings
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  # Don't let googletest's install rules leak its headers/libs into our package
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
 
   enable_testing()
@@ -174,5 +176,8 @@ install(TARGETS
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION ${LIB_DESTINATION_DIR}
 )
+
+# Python helper script (needs pyyaml and tabulate at runtime)
+install(PROGRAMS summarize_clang_tidy_findings.py DESTINATION bin)
 
 include(CPack)
