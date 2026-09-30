@@ -26,7 +26,7 @@ jobs:
         begin_group() { echo -e "::group::\033[93m$1\033[0m"; }
 
         begin_group "Downloading EnergyPlus-clang-tools"
-        # Not in the workspace, so that a checkout into it can never wipe the tools
+        # Not in the workspace: actions/checkout below wipes the workspace if it isn't a git repo yet
         CLANG_TOOLS_DIR="${RUNNER_TEMP}/clang-tools"
         mkdir -p "${CLANG_TOOLS_DIR}"
         gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir "${CLANG_TOOLS_DIR}" --clobber
@@ -48,6 +48,14 @@ jobs:
         ref: ${{ inputs.ref }}
         path: EnergyPlus
 
+    # LINK_WITH_PYTHON=ON so that the code gated behind it (PluginManager.cc...) is analyzed. We never link or run anything,
+    # but the Python headers are needed
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v7
+      id: setup-python
+      with:
+        python-version: '3.12'
+
     - name: Configure EnergyPlus
       working-directory: ./EnergyPlus
       run: |
@@ -56,8 +64,10 @@ jobs:
         cmake -G Ninja -DCMAKE_BUILD_TYPE:STRING=Release \
           -DENABLE_PCH:BOOL=ON \
           -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON \
-          -DLINK_WITH_PYTHON:BOOL=OFF -DPYTHON_CLI:BOOL=OFF -DBUILD_TESTING:BOOL=OFF \
-          -DBUILD_FORTRAN:BOOL=OFF -DDOCUMENTATION_BUILD:STRING=DoNotBuild \
+          -DLINK_WITH_PYTHON:BOOL=ON -DPYTHON_CLI:BOOL=ON \
+          -DPython_ROOT_DIR:PATH="$(dirname "$(dirname "${{ steps.setup-python.outputs.python-path }}")")" \
+          -DPython_REQUIRED_VERSION:STRING=${{ steps.setup-python.outputs.python-version }} \
+          -DBUILD_TESTING:BOOL=OFF -DBUILD_FORTRAN:BOOL=OFF -DDOCUMENTATION_BUILD:STRING=DoNotBuild \
           -DENABLE_OPENMP:BOOL=OFF \
           ..
         # Build the PCH
@@ -91,7 +101,7 @@ jobs:
     - name: Summarize clang-tidy findings
       if: always() && hashFiles('clang-tidy-findings.yaml') != ''
       run: |
-        sudo apt-get install -y --no-install-recommends python3-yaml python3-tabulate
+        python -m pip install pyyaml tabulate
         summarize_clang_tidy_findings.py clang-tidy-findings.yaml --title "energyplus-* clang-tidy checks"
 
     - name: Run find_unused_members
@@ -112,7 +122,6 @@ jobs:
     - name: Summarize find_unused_members findings
       if: always() && hashFiles('unused-members-findings.yaml') != ''
       run: |
-        sudo apt-get install -y --no-install-recommends python3-yaml python3-tabulate
         summarize_clang_tidy_findings.py unused-members-findings.yaml --title "find_unused_members"
 
     - name: Summarize
