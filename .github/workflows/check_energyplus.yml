@@ -46,7 +46,6 @@ jobs:
       with:
         repository: NatLabRockies/EnergyPlus
         ref: ${{ inputs.ref }}
-        path: EnergyPlus
 
     # LINK_WITH_PYTHON=ON so that the code gated behind it (PluginManager.cc...) is analyzed. We never link or run anything,
     # but the Python headers are needed
@@ -57,7 +56,6 @@ jobs:
         python-version: '3.12'
 
     - name: Configure EnergyPlus
-      working-directory: ./EnergyPlus
       run: |
         mkdir build && cd build
         echo "BUILD_DIR=$(pwd)" >> "$GITHUB_ENV"
@@ -78,13 +76,12 @@ jobs:
     - name: Run energyplus-* clang-tidy checks
       id: clang_tidy_checks
       continue-on-error: true
-      working-directory: ./EnergyPlus
       run: |
         run-clang-tidy-22 \
           -load="${TIDY_MODULE}" \
           -checks='-*,energyplus-*' \
           -use-color \
-          -export-fixes="${GITHUB_WORKSPACE}/clang-tidy-findings.yaml" \
+          -export-fixes=clang-tidy-findings.yaml \
           -p "${BUILD_DIR}" \
           -j "$(nproc)" \
           src/EnergyPlus/
@@ -107,9 +104,8 @@ jobs:
     - name: Run find_unused_members
       id: find_unused_members
       continue-on-error: true
-      working-directory: ./EnergyPlus
       run: |
-        find_unused_members -p ${BUILD_DIR} -j $(nproc) --export-fixes "${GITHUB_WORKSPACE}/unused-members-findings.yaml"
+        find_unused_members -p ${BUILD_DIR} -j $(nproc) --export-fixes unused-members-findings.yaml
 
     - name: Upload find_unused_members findings
       if: always()
