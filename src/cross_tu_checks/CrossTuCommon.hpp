@@ -53,7 +53,16 @@ describeField(const clang::FieldDecl *field,
 // Orders by file, then line, then column.
 bool locationLess(const FieldInfo &left, const FieldInfo &right);
 
-void sortByLocation(std::vector<FieldInfo> &fields);
+// One reported result: the field, the check that flagged it (eg
+// "energyplus-unused-member"), and the full diagnostic message.
+struct Finding {
+  FieldInfo field;
+  std::string check;
+  std::string message;
+};
+
+// "data member 'Qualified::name' [type]", the common prefix of every message.
+std::string describeMember(const FieldInfo &field);
 
 class FilteredCompilationDatabase final
     : public clang::tooling::CompilationDatabase {

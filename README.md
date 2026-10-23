@@ -42,8 +42,6 @@ Non-static data members that are written but never read, associating declaration
 - compound assignment and increment/decrement count as both
 - Taking a member's address, unresolved dependent member reads, and Clang-generated copy/move operations are conservatively treated as reads
 
-A member whose only appearance is its in-class initializer is both unused and write-only; it is reported once, as `energyplus-unused-member`.
-
 ## [EnergyPlusTidyModule](src/tidy_module)
 
 A clang-tidy plugin module (`clang-tidy --load=<this>.so -checks='-*,energyplus-*' ...`) bundling the `energyplus-recurring-static-message` and `energyplus-mixed-indexing` checks, reusing the AST-matching logic from `recurring_static_message_check` and `mixed_indexing_check` above.

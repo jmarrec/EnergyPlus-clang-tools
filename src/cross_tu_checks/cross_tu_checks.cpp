@@ -28,12 +28,13 @@
 
 #include <algorithm>
 #include <charconv>
+#include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
 #include <regex>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -217,12 +218,6 @@ private:
   WriteOnlyMemberFindings &writeOnly_;
 };
 
-struct Finding {
-  FieldInfo field;
-  std::string_view check;
-  std::string_view problem;
-};
-
 bool matches(const std::optional<std::regex> &expression,
              const std::string &value) {
   return !expression || std::regex_search(value, *expression);
@@ -274,23 +269,11 @@ int main(int argc, const char **argv) {
     return 2;
   }
 
-  // A field whose only appearance is its in-class initializer is both unused
-  // and write-only; report it once, as the stronger unused finding.
-  std::vector<Finding> findings;
-  std::unordered_set<std::string> unusedUsrs;
-  for (auto &field : unused.unusedFields()) {
-    unusedUsrs.insert(field.usr);
-    findings.push_back(
-        {std::move(field), "energyplus-unused-member", "is never referenced"});
-  }
-  const std::size_t unusedCount = findings.size();
-  for (auto &field : writeOnly.writeOnlyFields()) {
-    if (!unusedUsrs.contains(field.usr)) {
-      findings.push_back({std::move(field), "energyplus-write-only-member",
-                          "is written but never read"});
-    }
-  }
-  const std::size_t writeOnlyCount = findings.size() - unusedCount;
+  std::vector<Finding> findings = unused.findings();
+  std::vector<Finding> writeOnlyFindings = writeOnly.findings();
+  findings.insert(findings.end(),
+                  std::make_move_iterator(writeOnlyFindings.begin()),
+                  std::make_move_iterator(writeOnlyFindings.end()));
   std::stable_sort(findings.begin(), findings.end(),
                    [](const Finding &left, const Finding &right) {
                      return locationLess(left.field, right.field);
@@ -298,8 +281,10 @@ int main(int argc, const char **argv) {
 
   clang::tooling::TranslationUnitDiagnostics exported;
   exported.MainSourceFile = options->sourceRoot.string();
+  std::map<std::string, std::size_t> foundByCheck;
   std::size_t displayed = 0;
-  for (const auto &[field, check, problem] : findings) {
+  for (const auto &[field, check, message] : findings) {
+    ++foundByCheck[check];
     std::error_code error;
     fs::path displayPath =
         fs::relative(field.file, options->repositoryRoot, error);
@@ -311,16 +296,13 @@ int main(int argc, const char **argv) {
         !matches(options->nameRegex, field.qualifiedName)) {
       continue;
     }
-    const std::string message = "data member '" + field.qualifiedName + "' [" +
-                                field.type + "] " + std::string(problem);
     llvm::outs() << displayPathString << ':' << field.line << ':'
                  << field.column << ": warning: " << message << " [" << check
                  << "]\n";
     ++displayed;
 
-    clang::tooling::Diagnostic diagnostic(std::string(check),
-                                          clang::tooling::Diagnostic::Warning,
-                                          options->buildDir.string());
+    clang::tooling::Diagnostic diagnostic(
+        check, clang::tooling::Diagnostic::Warning, options->buildDir.string());
     diagnostic.Message.Message = message;
     diagnostic.Message.FilePath = field.file.string();
     diagnostic.Message.FileOffset = field.fileOffset;
@@ -340,9 +322,16 @@ int main(int argc, const char **argv) {
     yaml << exported;
   }
 
-  llvm::errs() << "Found " << unusedCount << " unreferenced and "
-               << writeOnlyCount << " write-only fields; displayed "
-               << displayed << " after filters\n"
+  llvm::errs() << "Found ";
+  const char *separator = "";
+  for (const auto &[check, count] : foundByCheck) {
+    llvm::errs() << separator << count << ' ' << check;
+    separator = ", ";
+  }
+  if (foundByCheck.empty()) {
+    llvm::errs() << "nothing";
+  }
+  llvm::errs() << "; displayed " << displayed << " after filters\n"
                << "Treat findings as candidates and validate them against "
                   "other build configurations.\n";
   return displayed > 0 ? 1 : 0;

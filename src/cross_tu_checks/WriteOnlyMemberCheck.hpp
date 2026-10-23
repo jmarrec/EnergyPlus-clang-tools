@@ -92,17 +92,20 @@ public:
     }
   }
 
-  std::vector<FieldInfo> writeOnlyFields() const {
-    std::vector<FieldInfo> result;
+  static constexpr const char *checkName = "energyplus-write-only-member";
+
+  std::vector<Finding> findings() const {
+    std::vector<Finding> result;
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto &[usr, field] : declarations_) {
       if (writes_.find(usr) != writes_.end() &&
           reads_.find(usr) == reads_.end() &&
           unresolvedReadNames_.find(field.name) == unresolvedReadNames_.end()) {
-        result.push_back(field);
+        result.push_back(
+            {field, checkName,
+             describeMember(field) + " is written but never read"});
       }
     }
-    sortByLocation(result);
     return result;
   }
 

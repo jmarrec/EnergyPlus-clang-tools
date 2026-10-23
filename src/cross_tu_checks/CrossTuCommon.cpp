@@ -109,8 +109,8 @@ bool locationLess(const FieldInfo &left, const FieldInfo &right) {
   return left.column < right.column;
 }
 
-void sortByLocation(std::vector<FieldInfo> &fields) {
-  std::sort(fields.begin(), fields.end(), locationLess);
+std::string describeMember(const FieldInfo &field) {
+  return "data member '" + field.qualifiedName + "' [" + field.type + "]";
 }
 
 namespace {

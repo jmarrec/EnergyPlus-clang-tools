@@ -80,17 +80,19 @@ public:
     }
   }
 
-  std::vector<FieldInfo> unusedFields() const {
-    std::vector<FieldInfo> result;
+  static constexpr const char *checkName = "energyplus-unused-member";
+
+  std::vector<Finding> findings() const {
+    std::vector<Finding> result;
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto &[usr, field] : declarations_) {
       if (references_.find(usr) == references_.end() &&
           unresolvedReferenceNames_.find(field.name) ==
               unresolvedReferenceNames_.end()) {
-        result.push_back(field);
+        result.push_back(
+            {field, checkName, describeMember(field) + " is never referenced"});
       }
     }
-    sortByLocation(result);
     return result;
   }
 
