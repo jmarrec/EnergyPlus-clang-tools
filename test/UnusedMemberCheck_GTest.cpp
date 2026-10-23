@@ -1,75 +1,22 @@
 #include "cross_tu_checks/UnusedMemberCheck.hpp"
 
-#include "clang/AST/ASTConsumer.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Frontend/FrontendAction.h"
-#include "clang/Tooling/Tooling.h"
+#include "CrossTuCheckFixture.hpp"
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
-#include <string>
-#include <vector>
-
-using namespace clang;
-using namespace clang::tooling;
-using cross_tu_checks::CrossTuCheck;
-using cross_tu_checks::Finding;
+using namespace cross_tu_checks_test;
 using cross_tu_checks::UnusedMemberCheck;
 
 namespace {
 
-// Virtual (in-memory) files live under here; only fields declared below
-// sourceRoot are considered, just like --source-root on a real build.
-constexpr auto *sourceRoot = "/fixture/src";
-
-// Hands each TU's AST to the check, as cross_tu_checks' CrossTuAction does.
-class CheckAction final : public ASTFrontendAction {
-public:
-  explicit CheckAction(CrossTuCheck &check) : check_(check) {}
-
-  std::unique_ptr<ASTConsumer>
-  CreateASTConsumer(CompilerInstance &compiler,
-                    llvm::StringRef /*inFile*/) override {
-    return check_.createConsumer(compiler);
-  }
-
-private:
-  CrossTuCheck &check_;
-};
-
-struct TranslationUnit {
-  std::string path;
-  std::string code;
-};
-
-// Runs every TU through a single UnusedMemberCheck (headers are shared by all
-// TUs) and returns the sorted qualified names of the members it reports.
-std::vector<std::string>
-unusedMembers(const std::vector<TranslationUnit> &tus,
-              const FileContentMappings &headers = {}) {
-  UnusedMemberCheck check{sourceRoot};
-  for (const TranslationUnit &tu : tus) {
-    EXPECT_TRUE(runToolOnCodeWithArgs(
-        std::make_unique<CheckAction>(check), tu.code, {"-std=c++20"}, tu.path,
-        "unused-member-test", std::make_shared<PCHContainerOperations>(),
-        headers))
-        << tu.path << " failed to compile";
-  }
-
-  std::vector<std::string> names;
-  for (const Finding &finding : check.findings()) {
-    names.push_back(finding.field.qualifiedName);
-  }
-  std::sort(names.begin(), names.end());
-  return names;
+Names unusedMembers(const std::vector<TranslationUnit> &tus,
+                    const clang::tooling::FileContentMappings &headers = {}) {
+  return flaggedMembers<UnusedMemberCheck>(tus, headers);
 }
 
-std::vector<std::string> unusedMembers(const std::string &code) {
-  return unusedMembers({{"/fixture/src/main.cc", code}});
+Names unusedMembers(const std::string &code) {
+  return flaggedMembers<UnusedMemberCheck>(code);
 }
-
-using Names = std::vector<std::string>;
 
 } // namespace
 
@@ -205,7 +152,8 @@ struct External {
 }
 
 TEST(UnusedMemberCheck, ReferenceInAnotherTUCounts) {
-  const FileContentMappings headers = {{"/fixture/src/Foo.hh", R"cpp(
+  const clang::tooling::FileContentMappings headers = {
+      {"/fixture/src/Foo.hh", R"cpp(
 #pragma once
 struct Foo {
   int a;

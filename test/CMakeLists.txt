@@ -1,6 +1,7 @@
 add_executable(clang_tools_test
     RecurringStaticMessageCheck_GTest.cpp
     MixedIndexingCheck_GTest.cpp
+    CrossTuCheckFixture.hpp
     UnusedMemberCheck_GTest.cpp
 )
 target_link_libraries(clang_tools_test
