@@ -7,29 +7,82 @@ on:
         description: 'EnergyPlus branch or tag to check out'
         required: false
         default: 'develop'
+      build_from_source:
+        description: 'Build EnergyPlus-clang-tools from the selected branch instead of downloading the latest release'
+        type: boolean
+        required: false
+        default: false
+  # PRs have no inputs: they always build from source (to test the PR's tools) and check EnergyPlus develop
+  pull_request:
+    branches: [ main ]
 
 env:
   CC: clang-22
   CXX: clang++-22
 
 jobs:
-  check:
-    name: Check EnergyPlus/${{ inputs.ref }}
+  # Only on PRs or when build_from_source: lets the workflow run tools that aren't released yet
+  build:
+    name: Build EnergyPlus-clang-tools
+    if: github.event_name == 'pull_request' || inputs.build_from_source
     runs-on: ubuntu-26.04
 
     steps:
 
+    - uses: actions/checkout@v7
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-22 libclang-22-dev libclang-cpp22-dev llvm-22-dev libcurl4-openssl-dev
+
+    - name: Build
+      run: |
+        mkdir build && cd build
+        cmake -G Ninja -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DBUILD_TESTING:BOOL=OFF \
+          -DCPACK_BINARY_TGZ:BOOL=ON -DCPACK_BINARY_STGZ:BOOL=OFF -DCPACK_BINARY_TZ:BOOL=OFF \
+          ..
+        ninja package
+
+    # Upload the package rather than the binaries themselves: artifacts don't preserve the executable bit
+    - name: Upload package
+      uses: actions/upload-artifact@v7
+      with:
+        name: clang-tools-package
+        path: build/EnergyPlus-clang-tools-*.tar.gz
+        if-no-files-found: error
+
+  check:
+    name: Check EnergyPlus/${{ inputs.ref || 'develop' }}
+    needs: build
+    # Run when build was skipped (downloading the release instead), not only when it succeeded
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-26.04
+
+    steps:
+
+    # Not in the workspace: actions/checkout below wipes the workspace if it isn't a git repo yet
+    - name: Download built EnergyPlus-clang-tools package
+      if: needs.build.result == 'success'
+      uses: actions/download-artifact@v7
+      with:
+        name: clang-tools-package
+        path: ${{ runner.temp }}/clang-tools
+
     - name: Download latest EnergyPlus-clang-tools release
+      if: needs.build.result == 'skipped'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir "${RUNNER_TEMP}/clang-tools" --clobber
+
+    - name: Set up EnergyPlus-clang-tools
+      run: |
         begin_group() { echo -e "::group::\033[93m$1\033[0m"; }
 
-        begin_group "Downloading EnergyPlus-clang-tools"
-        # Not in the workspace: actions/checkout below wipes the workspace if it isn't a git repo yet
+        begin_group "Extracting EnergyPlus-clang-tools"
         CLANG_TOOLS_DIR="${RUNNER_TEMP}/clang-tools"
-        mkdir -p "${CLANG_TOOLS_DIR}"
-        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir "${CLANG_TOOLS_DIR}" --clobber
         tar -xzf "${CLANG_TOOLS_DIR}"/*.tar.gz -C "${CLANG_TOOLS_DIR}" --strip-components=1
         echo "${CLANG_TOOLS_DIR}/bin" >> "$GITHUB_PATH"
         echo "::endgroup::"
@@ -45,7 +98,7 @@ jobs:
       uses: actions/checkout@v7
       with:
         repository: NatLabRockies/EnergyPlus
-        ref: ${{ inputs.ref }}
+        ref: ${{ inputs.ref || 'develop' }}
 
     # LINK_WITH_PYTHON=ON so that the code gated behind it (PluginManager.cc...) is analyzed. We never link or run anything,
     # but the Python headers are needed
@@ -101,42 +154,43 @@ jobs:
         python -m pip install pyyaml tabulate
         summarize_clang_tidy_findings.py clang-tidy-findings.yaml --title "energyplus-* clang-tidy checks"
 
-    - name: Run find_unused_members
-      id: find_unused_members
+    # Checks that need all TUs to decide (energyplus-unused-member, energyplus-write-only-member), in one pass
+    - name: Run cross_tu_checks
+      id: cross_tu_checks
       continue-on-error: true
       run: |
-        find_unused_members -p ${BUILD_DIR} -j $(nproc) --export-fixes unused-members-findings.yaml
+        cross_tu_checks -p ${BUILD_DIR} -j $(nproc) --export-fixes cross-tu-findings.yaml
 
-    - name: Upload find_unused_members findings
+    - name: Upload cross_tu_checks findings
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: unused-members-findings
-        path: unused-members-findings.yaml
+        name: cross-tu-findings
+        path: cross-tu-findings.yaml
         if-no-files-found: ignore
 
-    - name: Summarize find_unused_members findings
-      if: always() && hashFiles('unused-members-findings.yaml') != ''
+    - name: Summarize cross_tu_checks findings
+      if: always() && hashFiles('cross-tu-findings.yaml') != ''
       run: |
-        summarize_clang_tidy_findings.py unused-members-findings.yaml --title "find_unused_members"
+        summarize_clang_tidy_findings.py cross-tu-findings.yaml --title "cross_tu_checks"
 
     - name: Summarize
       if: always()
       env:
         CLANG_TIDY_OUTCOME: ${{ steps.clang_tidy_checks.outcome }}
-        FIND_UNUSED_MEMBERS_OUTCOME: ${{ steps.find_unused_members.outcome }}
+        CROSS_TU_CHECKS_OUTCOME: ${{ steps.cross_tu_checks.outcome }}
       run: |
         {
           echo "### EnergyPlus Static Analysis"
           echo "- energyplus-* clang-tidy checks: ${CLANG_TIDY_OUTCOME}"
-          echo "- find_unused_members: ${FIND_UNUSED_MEMBERS_OUTCOME}"
+          echo "- cross_tu_checks: ${CROSS_TU_CHECKS_OUTCOME}"
         } >> "$GITHUB_STEP_SUMMARY"
 
-    # Both checks above are continue-on-error so that they all get to run; fail the job here
+    # All checks above are continue-on-error so that they all get to run; fail the job here
     - name: Fail if any check found something
       if: |
         steps.clang_tidy_checks.outcome == 'failure' ||
-        steps.find_unused_members.outcome == 'failure'
+        steps.cross_tu_checks.outcome == 'failure'
       run: |
         echo "One or more checks reported findings; see the failed steps above."
         exit 1
