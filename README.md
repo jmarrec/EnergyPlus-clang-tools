@@ -18,6 +18,19 @@ Also shipped as a clang-tidy check, `energyplus-mixed-indexing`, via [EnergyPlus
 
 A dead-data-member finder built on `AllTUsToolExecutor` for real per-TU thread-pool parallelism (unlike the single-threaded `ClangTool` loop the other tools above use).
 
+## [find_write_only_members](src/find_write_only_members)
+
+Reports non-static data members that are written but never read by any translation unit in the compilation database, associating declarations and accesses across TUs via Clang USRs.
+- Plain/overloaded assignment, constructor member initializers, in-class initializers and aggregate/designated initialization count as writes
+- compound assignment and increment/decrement count as both
+- Taking a member's address, unresolved dependent member reads, and Clang-generated copy/move operations are conservatively treated as reads
+
+```bash
+find_write_only_members -p build --source-root src/EnergyPlus --scan-root src/EnergyPlus -j $(nproc)
+```
+
+`--source-root` limits which declarations can be reported; each (repeatable) `--scan-root` limits which TUs are analyzed (add `--scan-root tst/EnergyPlus` so test-only reads count). `--file-regex` / `--name-regex` only filter the final report. As for `find_unused_members`, configure EnergyPlus with `-DLINK_WITH_PYTHON=ON -DPYTHON_CLI=ON` to avoid false positives. Findings are removal candidates, not proof: conditional configurations, generated code, and TUs absent from the compilation database can hide reads.
+
 ## [EnergyPlusTidyModule](src/tidy_module)
 
 A clang-tidy plugin module (`clang-tidy --load=<this>.so -checks='-*,energyplus-*' ...`) bundling the `energyplus-recurring-static-message` and `energyplus-mixed-indexing` checks, reusing the AST-matching logic from `recurring_static_message_check` and `mixed_indexing_check` above.

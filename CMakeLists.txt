@@ -98,6 +98,13 @@ add_executable(find_unused_members src/find_unused_members/FindUnusedMembers.cpp
 target_compile_definitions(find_unused_members PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(find_unused_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
 
+# find_write_only_members: reports data members that are written but never read
+# across the compilation database. Same AllTUsToolExecutor/single-file layout as
+# find_unused_members.
+add_executable(find_write_only_members src/find_write_only_members/FindWriteOnlyMembers.cpp)
+target_compile_definitions(find_write_only_members PRIVATE ${LLVM_DEFINITIONS})
+target_link_libraries(find_write_only_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
+
 # ClangTool invokes the frontend library directly (not the `clang` driver binary), so it doesn't
 # infer a resource-dir (builtin headers like stdarg.h) from this executable's own install
 # location the way the driver would -- ask the actual compiler for its resource dir.
@@ -172,6 +179,7 @@ install(TARGETS
   recurring_static_message_check
   mixed_indexing_check
   find_unused_members
+  find_write_only_members
   EnergyPlusTidyModule
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION ${LIB_DESTINATION_DIR}
