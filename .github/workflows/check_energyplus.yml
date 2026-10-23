@@ -7,29 +7,79 @@ on:
         description: 'EnergyPlus branch or tag to check out'
         required: false
         default: 'develop'
+      build_from_source:
+        description: 'Build EnergyPlus-clang-tools from the selected branch instead of downloading the latest release'
+        type: boolean
+        required: false
+        default: false
 
 env:
   CC: clang-22
   CXX: clang++-22
 
 jobs:
-  check:
-    name: Check EnergyPlus/${{ inputs.ref }}
+  # Only when build_from_source: lets the workflow (dispatched from a branch) run tools that aren't released yet
+  build:
+    name: Build EnergyPlus-clang-tools
+    if: inputs.build_from_source
     runs-on: ubuntu-26.04
 
     steps:
 
+    - uses: actions/checkout@v7
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-22 libclang-22-dev libclang-cpp22-dev llvm-22-dev libcurl4-openssl-dev
+
+    - name: Build
+      run: |
+        mkdir build && cd build
+        cmake -G Ninja -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DBUILD_TESTING:BOOL=OFF \
+          -DCPACK_BINARY_TGZ:BOOL=ON -DCPACK_BINARY_STGZ:BOOL=OFF -DCPACK_BINARY_TZ:BOOL=OFF \
+          ..
+        ninja package
+
+    # Upload the package rather than the binaries themselves: artifacts don't preserve the executable bit
+    - name: Upload package
+      uses: actions/upload-artifact@v7
+      with:
+        name: clang-tools-package
+        path: build/EnergyPlus-clang-tools-*.tar.gz
+        if-no-files-found: error
+
+  check:
+    name: Check EnergyPlus/${{ inputs.ref }}
+    needs: build
+    # Run when build was skipped (downloading the release instead), not only when it succeeded
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-26.04
+
+    steps:
+
+    # Not in the workspace: actions/checkout below wipes the workspace if it isn't a git repo yet
+    - name: Download built EnergyPlus-clang-tools package
+      if: inputs.build_from_source
+      uses: actions/download-artifact@v7
+      with:
+        name: clang-tools-package
+        path: ${{ runner.temp }}/clang-tools
+
     - name: Download latest EnergyPlus-clang-tools release
+      if: ${{ !inputs.build_from_source }}
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
+        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir "${RUNNER_TEMP}/clang-tools" --clobber
+
+    - name: Set up EnergyPlus-clang-tools
+      run: |
         begin_group() { echo -e "::group::\033[93m$1\033[0m"; }
 
-        begin_group "Downloading EnergyPlus-clang-tools"
-        # Not in the workspace: actions/checkout below wipes the workspace if it isn't a git repo yet
+        begin_group "Extracting EnergyPlus-clang-tools"
         CLANG_TOOLS_DIR="${RUNNER_TEMP}/clang-tools"
-        mkdir -p "${CLANG_TOOLS_DIR}"
-        gh release download --repo jmarrec/EnergyPlus-clang-tools --pattern '*-Linux-*-x86_64.tar.gz' --dir "${CLANG_TOOLS_DIR}" --clobber
         tar -xzf "${CLANG_TOOLS_DIR}"/*.tar.gz -C "${CLANG_TOOLS_DIR}" --strip-components=1
         echo "${CLANG_TOOLS_DIR}/bin" >> "$GITHUB_PATH"
         echo "::endgroup::"
