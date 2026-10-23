@@ -154,64 +154,43 @@ jobs:
         python -m pip install pyyaml tabulate
         summarize_clang_tidy_findings.py clang-tidy-findings.yaml --title "energyplus-* clang-tidy checks"
 
-    - name: Run find_unused_members
-      id: find_unused_members
+    # Checks that need all TUs to decide (energyplus-unused-member, energyplus-write-only-member), in one pass
+    - name: Run cross_tu_checks
+      id: cross_tu_checks
       continue-on-error: true
       run: |
-        find_unused_members -p ${BUILD_DIR} -j $(nproc) --export-fixes unused-members-findings.yaml
+        cross_tu_checks -p ${BUILD_DIR} -j $(nproc) --export-fixes cross-tu-findings.yaml
 
-    - name: Upload find_unused_members findings
+    - name: Upload cross_tu_checks findings
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: unused-members-findings
-        path: unused-members-findings.yaml
+        name: cross-tu-findings
+        path: cross-tu-findings.yaml
         if-no-files-found: ignore
 
-    - name: Summarize find_unused_members findings
-      if: always() && hashFiles('unused-members-findings.yaml') != ''
+    - name: Summarize cross_tu_checks findings
+      if: always() && hashFiles('cross-tu-findings.yaml') != ''
       run: |
-        summarize_clang_tidy_findings.py unused-members-findings.yaml --title "find_unused_members"
-
-    - name: Run find_write_only_members
-      id: find_write_only_members
-      continue-on-error: true
-      run: |
-        find_write_only_members -p ${BUILD_DIR} -j $(nproc) --export-fixes write-only-members-findings.yaml
-
-    - name: Upload find_write_only_members findings
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: write-only-members-findings
-        path: write-only-members-findings.yaml
-        if-no-files-found: ignore
-
-    - name: Summarize find_write_only_members findings
-      if: always() && hashFiles('write-only-members-findings.yaml') != ''
-      run: |
-        summarize_clang_tidy_findings.py write-only-members-findings.yaml --title "find_write_only_members"
+        summarize_clang_tidy_findings.py cross-tu-findings.yaml --title "cross_tu_checks"
 
     - name: Summarize
       if: always()
       env:
         CLANG_TIDY_OUTCOME: ${{ steps.clang_tidy_checks.outcome }}
-        FIND_UNUSED_MEMBERS_OUTCOME: ${{ steps.find_unused_members.outcome }}
-        FIND_WRITE_ONLY_MEMBERS_OUTCOME: ${{ steps.find_write_only_members.outcome }}
+        CROSS_TU_CHECKS_OUTCOME: ${{ steps.cross_tu_checks.outcome }}
       run: |
         {
           echo "### EnergyPlus Static Analysis"
           echo "- energyplus-* clang-tidy checks: ${CLANG_TIDY_OUTCOME}"
-          echo "- find_unused_members: ${FIND_UNUSED_MEMBERS_OUTCOME}"
-          echo "- find_write_only_members: ${FIND_WRITE_ONLY_MEMBERS_OUTCOME}"
+          echo "- cross_tu_checks: ${CROSS_TU_CHECKS_OUTCOME}"
         } >> "$GITHUB_STEP_SUMMARY"
 
     # All checks above are continue-on-error so that they all get to run; fail the job here
     - name: Fail if any check found something
       if: |
         steps.clang_tidy_checks.outcome == 'failure' ||
-        steps.find_unused_members.outcome == 'failure' ||
-        steps.find_write_only_members.outcome == 'failure'
+        steps.cross_tu_checks.outcome == 'failure'
       run: |
         echo "One or more checks reported findings; see the failed steps above."
         exit 1

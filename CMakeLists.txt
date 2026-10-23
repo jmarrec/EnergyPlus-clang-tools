@@ -90,20 +90,29 @@ add_executable(mixed_indexing_check src/mixed_indexing_check/mixed_indexing_chec
 target_compile_definitions(mixed_indexing_check PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(mixed_indexing_check PRIVATE mixed_indexing_check_lib llvm_clang_includes)
 
-# find_unused_members: a shared/reviewed dead-data-member finder using
-# AllTUsToolExecutor (real per-TU-thread-pool parallelism, unlike
-# dead_member_check's single-threaded ClangTool loop above). Single-file, no
-# _lib split like the others -- nothing else links against its internals.
-add_executable(find_unused_members src/find_unused_members/FindUnusedMembers.cpp)
-target_compile_definitions(find_unused_members PRIVATE ${LLVM_DEFINITIONS})
-target_link_libraries(find_unused_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
+# cross_tu_checks: checks that need every TU before deciding (so can't be clang-tidy
+# checks), using AllTUsToolExecutor (real per-TU thread-pool parallelism, unlike the
+# single-threaded ClangTool loop the tools above use). All checks share a single
+# parse of each TU.
+add_library(cross_tu_checks_lib STATIC
+  src/cross_tu_checks/CrossTuCommon.cpp
+  src/cross_tu_checks/CrossTuCommon.hpp
+  src/cross_tu_checks/UnusedMemberCheck.cpp
+  src/cross_tu_checks/UnusedMemberCheck.hpp
+  src/cross_tu_checks/WriteOnlyMemberCheck.cpp
+  src/cross_tu_checks/WriteOnlyMemberCheck.hpp
+)
+target_include_directories(cross_tu_checks_lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_definitions(cross_tu_checks_lib PRIVATE ${LLVM_DEFINITIONS})
+target_link_libraries(cross_tu_checks_lib
+  PRIVATE
+    ${CLANG_TOOLING_LIBS}
+    llvm_clang_includes
+)
 
-# find_write_only_members: reports data members that are written but never read
-# across the compilation database. Same AllTUsToolExecutor/single-file layout as
-# find_unused_members.
-add_executable(find_write_only_members src/find_write_only_members/FindWriteOnlyMembers.cpp)
-target_compile_definitions(find_write_only_members PRIVATE ${LLVM_DEFINITIONS})
-target_link_libraries(find_write_only_members PRIVATE ${CLANG_TOOLING_LIBS} llvm_clang_includes)
+add_executable(cross_tu_checks src/cross_tu_checks/cross_tu_checks.cpp)
+target_compile_definitions(cross_tu_checks PRIVATE ${LLVM_DEFINITIONS})
+target_link_libraries(cross_tu_checks PRIVATE cross_tu_checks_lib ${CLANG_TOOLING_LIBS} llvm_clang_includes)
 
 # ClangTool invokes the frontend library directly (not the `clang` driver binary), so it doesn't
 # infer a resource-dir (builtin headers like stdarg.h) from this executable's own install
@@ -178,8 +187,7 @@ endif()
 install(TARGETS
   recurring_static_message_check
   mixed_indexing_check
-  find_unused_members
-  find_write_only_members
+  cross_tu_checks
   EnergyPlusTidyModule
   RUNTIME DESTINATION bin
   LIBRARY DESTINATION ${LIB_DESTINATION_DIR}
