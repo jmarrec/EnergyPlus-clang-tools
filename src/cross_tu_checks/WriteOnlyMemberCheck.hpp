@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cross_tu_checks/CrossTuCommon.hpp"
+#include "cross_tu_checks/CrossTuCheck.hpp"
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -13,11 +13,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-
-namespace clang {
-class ASTConsumer;
-class CompilerInstance;
-} // namespace clang
 
 namespace cross_tu_checks {
 
@@ -34,9 +29,9 @@ inline bool hasAccess(Access value, Access requested) {
 
 // Fields that are written (assigned, member-initialized, aggregate-initialized,
 // ...) but never read in any scanned TU.
-class WriteOnlyMemberFindings {
+class WriteOnlyMemberCheck final : public CrossTuCheck {
 public:
-  explicit WriteOnlyMemberFindings(fs::path sourceRoot)
+  explicit WriteOnlyMemberCheck(fs::path sourceRoot)
       : sourceRoot_(std::move(sourceRoot)) {}
 
   void recordDeclaration(const clang::FieldDecl *field,
@@ -92,9 +87,14 @@ public:
     }
   }
 
-  static constexpr const char *checkName = "energyplus-write-only-member";
+  static constexpr std::string_view checkName = "energyplus-write-only-member";
 
-  std::vector<Finding> findings() const {
+  std::string_view name() const override { return checkName; }
+
+  std::unique_ptr<clang::ASTConsumer>
+  createConsumer(clang::CompilerInstance &compiler) override;
+
+  std::vector<Finding> findings() const override {
     std::vector<Finding> result;
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto &[usr, field] : declarations_) {
@@ -102,7 +102,7 @@ public:
           reads_.find(usr) == reads_.end() &&
           unresolvedReadNames_.find(field.name) == unresolvedReadNames_.end()) {
         result.push_back(
-            {field, checkName,
+            {field, std::string(checkName),
              describeMember(field) + " is written but never read"});
       }
     }
@@ -117,9 +117,5 @@ private:
   std::unordered_set<std::string> writes_;
   std::unordered_set<std::string> unresolvedReadNames_;
 };
-
-std::unique_ptr<clang::ASTConsumer>
-makeWriteOnlyMemberConsumer(WriteOnlyMemberFindings &findings,
-                            clang::CompilerInstance &compiler);
 
 } // namespace cross_tu_checks

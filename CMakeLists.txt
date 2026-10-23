@@ -95,6 +95,7 @@ target_link_libraries(mixed_indexing_check PRIVATE mixed_indexing_check_lib llvm
 # single-threaded ClangTool loop the tools above use). All checks share a single
 # parse of each TU.
 add_library(cross_tu_checks_lib STATIC
+  src/cross_tu_checks/CrossTuCheck.hpp
   src/cross_tu_checks/CrossTuCommon.cpp
   src/cross_tu_checks/CrossTuCommon.hpp
   src/cross_tu_checks/UnusedMemberCheck.cpp

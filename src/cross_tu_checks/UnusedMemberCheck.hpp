@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cross_tu_checks/CrossTuCommon.hpp"
+#include "cross_tu_checks/CrossTuCheck.hpp"
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
@@ -14,18 +14,13 @@
 #include <unordered_set>
 #include <vector>
 
-namespace clang {
-class ASTConsumer;
-class CompilerInstance;
-} // namespace clang
-
 namespace cross_tu_checks {
 
 // Fields with no semantic reference at all (never named, positionally
 // initialized, bound, or offsetof'd) in any scanned TU.
-class UnusedMemberFindings {
+class UnusedMemberCheck final : public CrossTuCheck {
 public:
-  explicit UnusedMemberFindings(fs::path sourceRoot)
+  explicit UnusedMemberCheck(fs::path sourceRoot)
       : sourceRoot_(std::move(sourceRoot)) {}
 
   void recordDeclaration(const clang::FieldDecl *field,
@@ -80,17 +75,22 @@ public:
     }
   }
 
-  static constexpr const char *checkName = "energyplus-unused-member";
+  static constexpr std::string_view checkName = "energyplus-unused-member";
 
-  std::vector<Finding> findings() const {
+  std::string_view name() const override { return checkName; }
+
+  std::unique_ptr<clang::ASTConsumer>
+  createConsumer(clang::CompilerInstance &compiler) override;
+
+  std::vector<Finding> findings() const override {
     std::vector<Finding> result;
     std::lock_guard<std::mutex> lock(mutex_);
     for (const auto &[usr, field] : declarations_) {
       if (references_.find(usr) == references_.end() &&
           unresolvedReferenceNames_.find(field.name) ==
               unresolvedReferenceNames_.end()) {
-        result.push_back(
-            {field, checkName, describeMember(field) + " is never referenced"});
+        result.push_back({field, std::string(checkName),
+                          describeMember(field) + " is never referenced"});
       }
     }
     return result;
@@ -103,9 +103,5 @@ private:
   std::unordered_set<std::string> references_;
   std::unordered_set<std::string> unresolvedReferenceNames_;
 };
-
-std::unique_ptr<clang::ASTConsumer>
-makeUnusedMemberConsumer(UnusedMemberFindings &findings,
-                         clang::CompilerInstance &compiler);
 
 } // namespace cross_tu_checks

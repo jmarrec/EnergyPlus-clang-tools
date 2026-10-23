@@ -15,7 +15,7 @@ namespace {
 class WriteOnlyMemberVisitor final
     : public clang::RecursiveASTVisitor<WriteOnlyMemberVisitor> {
 public:
-  WriteOnlyMemberVisitor(WriteOnlyMemberFindings &findings,
+  WriteOnlyMemberVisitor(WriteOnlyMemberCheck &findings,
                          clang::ASTContext &context)
       : findings_(findings), context_(context) {}
 
@@ -279,13 +279,13 @@ private:
     }
   }
 
-  WriteOnlyMemberFindings &findings_;
+  WriteOnlyMemberCheck &findings_;
   clang::ASTContext &context_;
 };
 
 class WriteOnlyMemberConsumer final : public clang::ASTConsumer {
 public:
-  WriteOnlyMemberConsumer(WriteOnlyMemberFindings &findings,
+  WriteOnlyMemberConsumer(WriteOnlyMemberCheck &findings,
                           clang::ASTContext &context)
       : visitor_(findings, context) {}
 
@@ -300,9 +300,8 @@ private:
 } // namespace
 
 std::unique_ptr<clang::ASTConsumer>
-makeWriteOnlyMemberConsumer(WriteOnlyMemberFindings &findings,
-                            clang::CompilerInstance &compiler) {
-  return std::make_unique<WriteOnlyMemberConsumer>(findings,
+WriteOnlyMemberCheck::createConsumer(clang::CompilerInstance &compiler) {
+  return std::make_unique<WriteOnlyMemberConsumer>(*this,
                                                    compiler.getASTContext());
 }
 

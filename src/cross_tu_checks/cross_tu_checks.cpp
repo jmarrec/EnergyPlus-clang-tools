@@ -11,6 +11,7 @@
 // "reference" (e.g. an in-class initializer is a write for write-only, but not
 // a use for unused).
 
+#include "cross_tu_checks/CrossTuCheck.hpp"
 #include "cross_tu_checks/CrossTuCommon.hpp"
 #include "cross_tu_checks/UnusedMemberCheck.hpp"
 #include "cross_tu_checks/WriteOnlyMemberCheck.hpp"
@@ -182,40 +183,45 @@ std::optional<Options> parseOptions(int argc, const char **argv) {
   return options;
 }
 
+using Checks = std::vector<std::unique_ptr<CrossTuCheck>>;
+
+// Every available check: the one place to register a new one.
+Checks makeAllChecks(const fs::path &sourceRoot) {
+  Checks checks;
+  checks.push_back(std::make_unique<UnusedMemberCheck>(sourceRoot));
+  checks.push_back(std::make_unique<WriteOnlyMemberCheck>(sourceRoot));
+  return checks;
+}
+
 class CrossTuAction final : public clang::ASTFrontendAction {
 public:
-  CrossTuAction(UnusedMemberFindings &unused,
-                WriteOnlyMemberFindings &writeOnly)
-      : unused_(unused), writeOnly_(writeOnly) {}
+  explicit CrossTuAction(Checks &checks) : checks_(checks) {}
 
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &compiler,
                     llvm::StringRef) override {
     std::vector<std::unique_ptr<clang::ASTConsumer>> consumers;
-    consumers.push_back(makeUnusedMemberConsumer(unused_, compiler));
-    consumers.push_back(makeWriteOnlyMemberConsumer(writeOnly_, compiler));
+    for (const auto &check : checks_) {
+      consumers.push_back(check->createConsumer(compiler));
+    }
     return std::make_unique<clang::MultiplexConsumer>(std::move(consumers));
   }
 
 private:
-  UnusedMemberFindings &unused_;
-  WriteOnlyMemberFindings &writeOnly_;
+  Checks &checks_;
 };
 
 class CrossTuActionFactory final
     : public clang::tooling::FrontendActionFactory {
 public:
-  CrossTuActionFactory(UnusedMemberFindings &unused,
-                       WriteOnlyMemberFindings &writeOnly)
-      : unused_(unused), writeOnly_(writeOnly) {}
+  explicit CrossTuActionFactory(Checks &checks) : checks_(checks) {}
 
   std::unique_ptr<clang::FrontendAction> create() override {
-    return std::make_unique<CrossTuAction>(unused_, writeOnly_);
+    return std::make_unique<CrossTuAction>(checks_);
   }
 
 private:
-  UnusedMemberFindings &unused_;
-  WriteOnlyMemberFindings &writeOnly_;
+  Checks &checks_;
 };
 
 bool matches(const std::optional<std::regex> &expression,
@@ -259,21 +265,22 @@ int main(int argc, const char **argv) {
 
   llvm::errs() << "Scanning " << filteredDatabase.size()
                << " translation units with " << options->jobs << " jobs\n";
-  UnusedMemberFindings unused(options->sourceRoot);
-  WriteOnlyMemberFindings writeOnly(options->sourceRoot);
+  Checks checks = makeAllChecks(options->sourceRoot);
   clang::tooling::AllTUsToolExecutor executor(filteredDatabase, options->jobs);
-  if (llvm::Error error = executor.execute(
-          std::make_unique<CrossTuActionFactory>(unused, writeOnly))) {
+  if (llvm::Error error =
+          executor.execute(std::make_unique<CrossTuActionFactory>(checks))) {
     llvm::errs() << "error: Clang analysis failed: "
                  << llvm::toString(std::move(error)) << '\n';
     return 2;
   }
 
-  std::vector<Finding> findings = unused.findings();
-  std::vector<Finding> writeOnlyFindings = writeOnly.findings();
-  findings.insert(findings.end(),
-                  std::make_move_iterator(writeOnlyFindings.begin()),
-                  std::make_move_iterator(writeOnlyFindings.end()));
+  std::vector<Finding> findings;
+  for (const auto &check : checks) {
+    std::vector<Finding> checkFindings = check->findings();
+    findings.insert(findings.end(),
+                    std::make_move_iterator(checkFindings.begin()),
+                    std::make_move_iterator(checkFindings.end()));
+  }
   std::stable_sort(findings.begin(), findings.end(),
                    [](const Finding &left, const Finding &right) {
                      return locationLess(left.field, right.field);

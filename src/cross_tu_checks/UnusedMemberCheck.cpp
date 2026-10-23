@@ -14,7 +14,7 @@ namespace {
 class UnusedMemberVisitor final
     : public clang::RecursiveASTVisitor<UnusedMemberVisitor> {
 public:
-  UnusedMemberVisitor(UnusedMemberFindings &findings,
+  UnusedMemberVisitor(UnusedMemberCheck &findings,
                       clang::SourceManager &sourceManager)
       : findings_(findings), sourceManager_(sourceManager) {}
 
@@ -100,13 +100,13 @@ private:
     }
   }
 
-  UnusedMemberFindings &findings_;
+  UnusedMemberCheck &findings_;
   clang::SourceManager &sourceManager_;
 };
 
 class UnusedMemberConsumer final : public clang::ASTConsumer {
 public:
-  UnusedMemberConsumer(UnusedMemberFindings &findings,
+  UnusedMemberConsumer(UnusedMemberCheck &findings,
                        clang::SourceManager &sourceManager)
       : visitor_(findings, sourceManager) {}
 
@@ -121,9 +121,8 @@ private:
 } // namespace
 
 std::unique_ptr<clang::ASTConsumer>
-makeUnusedMemberConsumer(UnusedMemberFindings &findings,
-                         clang::CompilerInstance &compiler) {
-  return std::make_unique<UnusedMemberConsumer>(findings,
+UnusedMemberCheck::createConsumer(clang::CompilerInstance &compiler) {
+  return std::make_unique<UnusedMemberConsumer>(*this,
                                                 compiler.getSourceManager());
 }
 
