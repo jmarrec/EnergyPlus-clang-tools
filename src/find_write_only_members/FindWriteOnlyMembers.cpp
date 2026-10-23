@@ -14,9 +14,11 @@
 #endif
 #include "clang/Tooling/AllTUsExecution.h"
 #include "clang/Tooling/CompilationDatabase.h"
+#include "clang/Tooling/DiagnosticsYaml.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -42,6 +44,7 @@ struct Options {
   fs::path buildDir;
   fs::path repositoryRoot;
   fs::path sourceRoot;
+  std::optional<fs::path> exportFixes;
   std::vector<fs::path> scanRoots;
   unsigned jobs = 1;
   std::optional<std::regex> fileRegex;
@@ -66,6 +69,8 @@ void printUsage(llvm::raw_ostream &out, const char *program) {
       << "  --file-regex <regex>      Filter findings by repository-relative "
          "path\n"
       << "  --name-regex <regex>      Filter findings by qualified field name\n"
+      << "  --export-fixes <file>     Write findings as a clang-tidy "
+         "export-fixes YAML\n"
       << "  -h, --help                Show this help\n";
 }
 
@@ -142,6 +147,12 @@ std::optional<Options> parseOptions(int argc, const char **argv) {
         return std::nullopt;
       }
       sourceRootArgument = value;
+    } else if (argument == "--export-fixes") {
+      const char *value = requireValue(index, argument);
+      if (!value) {
+        return std::nullopt;
+      }
+      options.exportFixes = fs::path(value);
     } else if (argument == "--scan-root") {
       const char *value = requireValue(index, argument);
       if (!value) {
@@ -285,6 +296,7 @@ struct FieldInfo {
   fs::path file;
   unsigned line = 0;
   unsigned column = 0;
+  unsigned fileOffset = 0;
 };
 
 enum class Access : unsigned { None = 0, Read = 1, Write = 2 };
@@ -336,7 +348,8 @@ public:
                    field->getType().getAsString(),
                    file,
                    presumed.isValid() ? presumed.getLine() : 0,
-                   presumed.isValid() ? presumed.getColumn() : 0};
+                   presumed.isValid() ? presumed.getColumn() : 0,
+                   sourceManager.getFileOffset(location)};
     std::lock_guard<std::mutex> lock(mutex_);
     declarations_.try_emplace(usr, std::move(info));
   }
@@ -775,6 +788,8 @@ int main(int argc, const char **argv) {
   }
 
   const auto writeOnlyFields = findings.writeOnlyFields();
+  clang::tooling::TranslationUnitDiagnostics exported;
+  exported.MainSourceFile = options->sourceRoot.string();
   std::size_t displayed = 0;
   for (const auto &field : writeOnlyFields) {
     std::error_code error;
@@ -792,6 +807,28 @@ int main(int argc, const char **argv) {
                  << field.column << ": " << field.qualifiedName << " ["
                  << field.type << "]\n";
     ++displayed;
+
+    clang::tooling::Diagnostic diagnostic("energyplus-write-only-member",
+                                          clang::tooling::Diagnostic::Warning,
+                                          options->buildDir.string());
+    diagnostic.Message.Message = "data member '" + field.qualifiedName + "' [" +
+                                 field.type + "] is written but never read";
+    diagnostic.Message.FilePath = field.file.string();
+    diagnostic.Message.FileOffset = field.fileOffset;
+    exported.Diagnostics.push_back(std::move(diagnostic));
+  }
+
+  if (options->exportFixes) {
+    std::error_code error;
+    llvm::raw_fd_ostream out(options->exportFixes->string(), error);
+    if (error) {
+      llvm::errs() << "error: could not write "
+                   << options->exportFixes->string() << ": " << error.message()
+                   << '\n';
+      return 2;
+    }
+    llvm::yaml::Output yaml(out);
+    yaml << exported;
   }
 
   llvm::errs() << "Found " << writeOnlyFields.size()
@@ -799,5 +836,5 @@ int main(int argc, const char **argv) {
                << " after filters\n"
                << "Treat findings as candidates and validate them against "
                   "other build configurations.\n";
-  return 0;
+  return displayed > 0 ? 1 : 0;
 }

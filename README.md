@@ -29,7 +29,12 @@ Reports non-static data members that are written but never read by any translati
 find_write_only_members -p build --source-root src/EnergyPlus --scan-root src/EnergyPlus -j $(nproc)
 ```
 
-`--source-root` limits which declarations can be reported; each (repeatable) `--scan-root` limits which TUs are analyzed (add `--scan-root tst/EnergyPlus` so test-only reads count). `--file-regex` / `--name-regex` only filter the final report. As for `find_unused_members`, configure EnergyPlus with `-DLINK_WITH_PYTHON=ON -DPYTHON_CLI=ON` to avoid false positives. Findings are removal candidates, not proof: conditional configurations, generated code, and TUs absent from the compilation database can hide reads.
+- `--source-root` limits which declarations can be reported; each (repeatable)
+- `--scan-root` limits which TUs are analyzed (add `--scan-root tst/EnergyPlus` so test-only reads count).
+- `--file-regex` / `--name-regex` only filter the final report.
+- `--export-fixes <file>` writes the findings as clang-tidy export-fixes YAML (consumable by `summarize_clang_tidy_findings.py`), and the tool exits 1 if any finding is displayed.
+
+As for `find_unused_members`, configure EnergyPlus with `-DLINK_WITH_PYTHON=ON -DPYTHON_CLI=ON` to avoid false positives. Findings are removal candidates, not proof: conditional configurations, generated code, and TUs absent from the compilation database can hide reads.
 
 ## [EnergyPlusTidyModule](src/tidy_module)
 
