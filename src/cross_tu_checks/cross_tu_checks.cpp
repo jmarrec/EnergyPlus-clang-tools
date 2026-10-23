@@ -23,7 +23,10 @@
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/DiagnosticsYaml.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/GlobPattern.h"
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -53,6 +56,9 @@ struct Options {
   bool keepPch = true;
   std::optional<std::regex> fileRegex;
   std::optional<std::regex> nameRegex;
+  // clang-tidy style: (enable, glob) in order, the last matching one wins.
+  std::vector<std::pair<bool, llvm::GlobPattern>> checkPatterns;
+  bool listChecks = false;
 };
 
 void printUsage(llvm::raw_ostream &out, const char *program) {
@@ -69,6 +75,12 @@ void printUsage(llvm::raw_ostream &out, const char *program) {
          "(repeatable)\n"
       << "  -j, --jobs <count>        Number of parallel Clang jobs (default: "
          "1)\n"
+      << "  --checks <globs>          Comma-separated globs of checks to run, "
+         "'-'\n"
+      << "                            prefix disables, appended to the default "
+         "'*'\n"
+      << "                            (clang-tidy syntax)\n"
+      << "  --list-checks             List the enabled checks and exit\n"
       << "  --no-pch                  Strip CMake's precompiled header (when "
          "it\n"
       << "                            was built by a different Clang version)\n"
@@ -78,6 +90,40 @@ void printUsage(llvm::raw_ostream &out, const char *program) {
       << "  --export-fixes <file>     Write findings as a clang-tidy "
          "export-fixes YAML\n"
       << "  -h, --help                Show this help\n";
+}
+
+// GlobPattern keeps a StringRef into its pattern, so `value` must outlive the
+// result: it's always a slice of argv here.
+bool parseCheckPatterns(
+    llvm::StringRef value,
+    std::vector<std::pair<bool, llvm::GlobPattern>> &patterns) {
+  llvm::SmallVector<llvm::StringRef, 4> globs;
+  value.split(globs, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (llvm::StringRef glob : globs) {
+    glob = glob.trim();
+    const bool enable = !glob.consume_front("-");
+    if (glob.empty()) {
+      continue;
+    }
+    auto pattern = llvm::GlobPattern::create(glob);
+    if (!pattern) {
+      llvm::errs() << "error: invalid --checks glob '" << glob
+                   << "': " << llvm::toString(pattern.takeError()) << '\n';
+      return false;
+    }
+    patterns.emplace_back(enable, std::move(*pattern));
+  }
+  return true;
+}
+
+bool isEnabled(const Options &options, llvm::StringRef check) {
+  bool enabled = false;
+  for (const auto &[enable, pattern] : options.checkPatterns) {
+    if (pattern.match(check)) {
+      enabled = enable;
+    }
+  }
+  return enabled;
 }
 
 bool parseUnsigned(std::string_view value, unsigned &result) {
@@ -92,10 +138,20 @@ bool parseUnsigned(std::string_view value, unsigned &result) {
 
 std::optional<Options> parseOptions(int argc, const char **argv) {
   Options options;
+  // As in clang-tidy, --checks is appended to the default of every check, so
+  // `--checks=-foo` means all but foo.
+  parseCheckPatterns("*", options.checkPatterns);
   std::vector<std::string> scanRootArguments;
   std::optional<std::string> sourceRootArgument;
 
+  // `--option=value`, as well as `--option value`. The inline value is the tail
+  // of an argv string, so its data() is still a NUL-terminated C string.
+  std::optional<std::string_view> inlineValue;
+
   auto requireValue = [&](int &index, std::string_view option) -> const char * {
+    if (inlineValue) {
+      return inlineValue->data();
+    }
     if (++index >= argc) {
       llvm::errs() << "error: " << option << " requires a value\n";
       return nullptr;
@@ -103,8 +159,22 @@ std::optional<Options> parseOptions(int argc, const char **argv) {
     return argv[index];
   };
 
+  auto rejectValue = [&](std::string_view option) {
+    if (inlineValue) {
+      llvm::errs() << "error: " << option << " does not take a value\n";
+      return false;
+    }
+    return true;
+  };
+
   for (int index = 1; index < argc; ++index) {
-    const std::string_view argument(argv[index]);
+    std::string_view argument(argv[index]);
+    inlineValue.reset();
+    if (const auto equals = argument.find('=');
+        argument.starts_with("--") && equals != std::string_view::npos) {
+      inlineValue = argument.substr(equals + 1);
+      argument = argument.substr(0, equals);
+    }
     if (argument == "-p" || argument == "--build-dir") {
       const char *value = requireValue(index, argument);
       if (!value) {
@@ -137,7 +207,20 @@ std::optional<Options> parseOptions(int argc, const char **argv) {
         return std::nullopt;
       }
     } else if (argument == "--no-pch") {
+      if (!rejectValue(argument)) {
+        return std::nullopt;
+      }
       options.keepPch = false;
+    } else if (argument == "--checks") {
+      const char *value = requireValue(index, argument);
+      if (!value || !parseCheckPatterns(value, options.checkPatterns)) {
+        return std::nullopt;
+      }
+    } else if (argument == "--list-checks") {
+      if (!rejectValue(argument)) {
+        return std::nullopt;
+      }
+      options.listChecks = true;
     } else if (argument == "--file-regex" || argument == "--name-regex") {
       const char *value = requireValue(index, argument);
       if (!value) {
@@ -162,6 +245,9 @@ std::optional<Options> parseOptions(int argc, const char **argv) {
   }
 
   if (options.buildDir.empty()) {
+    if (options.listChecks) {
+      return options;
+    }
     llvm::errs() << "error: -p/--build-dir is required\n";
     return std::nullopt;
   }
@@ -246,6 +332,22 @@ int main(int argc, const char **argv) {
     return 2;
   }
 
+  Checks checks = makeAllChecks(options->sourceRoot);
+  std::erase_if(checks, [&](const std::unique_ptr<CrossTuCheck> &check) {
+    return !isEnabled(*options, check->name());
+  });
+  if (options->listChecks) {
+    llvm::outs() << "Enabled checks:\n";
+    for (const auto &check : checks) {
+      llvm::outs() << "    " << check->name() << '\n';
+    }
+    return 0;
+  }
+  if (checks.empty()) {
+    llvm::errs() << "error: no checks enabled by --checks\n";
+    return 2;
+  }
+
   std::string databaseError;
   auto database = clang::tooling::CompilationDatabase::loadFromDirectory(
       options->buildDir.string(), databaseError);
@@ -265,7 +367,6 @@ int main(int argc, const char **argv) {
 
   llvm::errs() << "Scanning " << filteredDatabase.size()
                << " translation units with " << options->jobs << " jobs\n";
-  Checks checks = makeAllChecks(options->sourceRoot);
   clang::tooling::AllTUsToolExecutor executor(filteredDatabase, options->jobs);
   if (llvm::Error error =
           executor.execute(std::make_unique<CrossTuActionFactory>(checks))) {

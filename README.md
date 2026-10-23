@@ -22,6 +22,7 @@ Checks that can only decide after seeing every translation unit in the compilati
 cross_tu_checks -p build --source-root src/EnergyPlus --scan-root src/EnergyPlus -j $(nproc)
 ```
 
+- `--checks <globs>` picks which checks run, with clang-tidy's syntax: comma-separated globs, a `-` prefix disables, later globs win, and the list is appended to the default `*` (so `--checks=-energyplus-unused-member` runs every other check, `--checks='-*,energyplus-write-only-member'` only that one). `--list-checks` prints the enabled checks and exits. Since parsing each TU dominates the cost, disabling checks narrows the report (and the exit code) rather than speeding the run up much.
 - `--source-root` limits which declarations can be reported.
 - `--scan-root` (repeatable) limits which TUs are analyzed (add `--scan-root tst/EnergyPlus` so test-only reads count).
 - `--file-regex` / `--name-regex` only filter the final report.
