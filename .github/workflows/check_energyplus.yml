@@ -12,16 +12,19 @@ on:
         type: boolean
         required: false
         default: false
+  # PRs have no inputs: they always build from source (to test the PR's tools) and check EnergyPlus develop
+  pull_request:
+    branches: [ main ]
 
 env:
   CC: clang-22
   CXX: clang++-22
 
 jobs:
-  # Only when build_from_source: lets the workflow (dispatched from a branch) run tools that aren't released yet
+  # Only on PRs or when build_from_source: lets the workflow run tools that aren't released yet
   build:
     name: Build EnergyPlus-clang-tools
-    if: inputs.build_from_source
+    if: github.event_name == 'pull_request' || inputs.build_from_source
     runs-on: ubuntu-26.04
 
     steps:
@@ -51,7 +54,7 @@ jobs:
         if-no-files-found: error
 
   check:
-    name: Check EnergyPlus/${{ inputs.ref }}
+    name: Check EnergyPlus/${{ inputs.ref || 'develop' }}
     needs: build
     # Run when build was skipped (downloading the release instead), not only when it succeeded
     if: ${{ !failure() && !cancelled() }}
@@ -61,14 +64,14 @@ jobs:
 
     # Not in the workspace: actions/checkout below wipes the workspace if it isn't a git repo yet
     - name: Download built EnergyPlus-clang-tools package
-      if: inputs.build_from_source
+      if: needs.build.result == 'success'
       uses: actions/download-artifact@v7
       with:
         name: clang-tools-package
         path: ${{ runner.temp }}/clang-tools
 
     - name: Download latest EnergyPlus-clang-tools release
-      if: ${{ !inputs.build_from_source }}
+      if: needs.build.result == 'skipped'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
@@ -95,7 +98,7 @@ jobs:
       uses: actions/checkout@v7
       with:
         repository: NatLabRockies/EnergyPlus
-        ref: ${{ inputs.ref }}
+        ref: ${{ inputs.ref || 'develop' }}
 
     # LINK_WITH_PYTHON=ON so that the code gated behind it (PluginManager.cc...) is analyzed. We never link or run anything,
     # but the Python headers are needed
