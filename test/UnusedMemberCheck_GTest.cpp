@@ -7,21 +7,10 @@
 using namespace cross_tu_checks_test;
 using cross_tu_checks::UnusedMemberCheck;
 
-namespace {
+using UnusedMemberCheckTest = CrossTuCheckTest<UnusedMemberCheck>;
 
-Names unusedMembers(const std::vector<TranslationUnit> &tus,
-                    const clang::tooling::FileContentMappings &headers = {}) {
-  return flaggedMembers<UnusedMemberCheck>(tus, headers);
-}
-
-Names unusedMembers(const std::string &code) {
-  return flaggedMembers<UnusedMemberCheck>(code);
-}
-
-} // namespace
-
-TEST(UnusedMemberCheck, FlagsMemberNeverReferenced) {
-  EXPECT_EQ(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, FlagsMemberNeverReferenced) {
+  EXPECT_EQ(flagged(R"cpp(
 struct Foo {
   int used = 0;
   int unused;
@@ -31,8 +20,8 @@ int get(const Foo &foo) { return foo.used; }
             Names{"Foo::unused"});
 }
 
-TEST(UnusedMemberCheck, InClassInitializerIsNotAReference) {
-  EXPECT_EQ(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, InClassInitializerIsNotAReference) {
+  EXPECT_EQ(flagged(R"cpp(
 struct Foo {
   double value = 0.0;
 };
@@ -40,8 +29,8 @@ struct Foo {
             Names{"Foo::value"});
 }
 
-TEST(UnusedMemberCheck, AWriteIsAReference) {
-  EXPECT_TRUE(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, AWriteIsAReference) {
+  EXPECT_TRUE(flagged(R"cpp(
 struct Foo {
   int value;
 };
@@ -50,8 +39,8 @@ void set(Foo &foo) { foo.value = 1; }
                   .empty());
 }
 
-TEST(UnusedMemberCheck, ConstructorInitializerIsAReference) {
-  EXPECT_TRUE(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, ConstructorInitializerIsAReference) {
+  EXPECT_TRUE(flagged(R"cpp(
 struct Foo {
   Foo() : value(1) {}
   int value;
@@ -60,8 +49,8 @@ struct Foo {
                   .empty());
 }
 
-TEST(UnusedMemberCheck, AggregateInitReferencesEveryMember) {
-  EXPECT_TRUE(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, AggregateInitReferencesEveryMember) {
+  EXPECT_TRUE(flagged(R"cpp(
 struct Foo {
   int a;
   int b;
@@ -71,11 +60,11 @@ Foo make() { return Foo{1, 2}; }
                   .empty());
 }
 
-TEST(UnusedMemberCheck, DesignatedInitReferencesEveryMember) {
+TEST_F(UnusedMemberCheckTest, DesignatedInitReferencesEveryMember) {
   // TODO: this should probably NOT do that, but I don't think I care enough
   // A designated initializer is still an InitListExpr of type Foo, so the
   // aggregate rule marks every member used, not just the designated ones.
-  EXPECT_TRUE(unusedMembers(R"cpp(
+  EXPECT_TRUE(flagged(R"cpp(
 struct Foo {
   int a;
   int b;
@@ -85,8 +74,8 @@ Foo make() { return Foo{.a = 1}; }
                   .empty());
 }
 
-TEST(UnusedMemberCheck, StructuredBindingReferencesEveryMember) {
-  EXPECT_TRUE(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, StructuredBindingReferencesEveryMember) {
+  EXPECT_TRUE(flagged(R"cpp(
 struct Foo {
   int a;
   int b;
@@ -99,8 +88,8 @@ int sum(const Foo &foo) {
                   .empty());
 }
 
-TEST(UnusedMemberCheck, OffsetofIsAReference) {
-  EXPECT_TRUE(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, OffsetofIsAReference) {
+  EXPECT_TRUE(flagged(R"cpp(
 struct Foo {
   int a;
 };
@@ -109,8 +98,8 @@ unsigned long offset() { return __builtin_offsetof(Foo, a); }
                   .empty());
 }
 
-TEST(UnusedMemberCheck, AnonymousUnionMemberIsReferencedThroughParent) {
-  EXPECT_EQ(unusedMembers(R"cpp(
+TEST_F(UnusedMemberCheckTest, AnonymousUnionMemberIsReferencedThroughParent) {
+  EXPECT_EQ(flagged(R"cpp(
 struct Foo {
   union {
     int asInt;
@@ -122,10 +111,10 @@ int get(const Foo &foo) { return foo.asInt; }
             Names{"Foo::(anonymous union)::asFloat"});
 }
 
-TEST(UnusedMemberCheck, DependentAccessSuppressesByName) {
+TEST_F(UnusedMemberCheckTest, DependentAccessSuppressesByName) {
   // t.value can't be resolved in an uninstantiated template, so any member
   // named "value" is conservatively treated as used.
-  EXPECT_EQ(unusedMembers(R"cpp(
+  EXPECT_EQ(flagged(R"cpp(
 struct Foo {
   int value;
   int other;
@@ -135,14 +124,14 @@ template <typename T> int get(const T &t) { return t.value; }
             Names{"Foo::other"});
 }
 
-TEST(UnusedMemberCheck, IgnoresMembersOutsideSourceRoot) {
-  EXPECT_EQ(unusedMembers({{"/fixture/src/main.cc", R"cpp(
+TEST_F(UnusedMemberCheckTest, IgnoresMembersOutsideSourceRoot) {
+  EXPECT_EQ(flagged({{"/fixture/src/main.cc", R"cpp(
 #include "../third_party/External.hh"
 struct Foo {
   int unused;
 };
 )cpp"}},
-                          {{"/fixture/third_party/External.hh", R"cpp(
+                    {{"/fixture/third_party/External.hh", R"cpp(
 #pragma once
 struct External {
   int unused;
@@ -151,7 +140,7 @@ struct External {
             Names{"Foo::unused"});
 }
 
-TEST(UnusedMemberCheck, ReferenceInAnotherTUCounts) {
+TEST_F(UnusedMemberCheckTest, ReferenceInAnotherTUCounts) {
   const clang::tooling::FileContentMappings headers = {
       {"/fixture/src/Foo.hh", R"cpp(
 #pragma once
@@ -171,8 +160,8 @@ int getB(const Foo &foo) { return foo.b; }
 )cpp"};
 
   // Each TU alone leaves the other member unreferenced...
-  EXPECT_EQ(unusedMembers({useA}, headers), Names{"Foo::b"});
-  EXPECT_EQ(unusedMembers({useB}, headers), Names{"Foo::a"});
+  EXPECT_EQ(flagged({useA}, headers), Names{"Foo::b"});
+  EXPECT_EQ(flagged({useB}, headers), Names{"Foo::a"});
   // ...but together they reference both: the field is matched across TUs.
-  EXPECT_TRUE(unusedMembers({useA, useB}, headers).empty());
+  EXPECT_TRUE(flagged({useA, useB}, headers).empty());
 }

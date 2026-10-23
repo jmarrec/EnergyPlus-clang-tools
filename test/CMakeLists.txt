@@ -3,6 +3,7 @@ add_executable(clang_tools_test
     MixedIndexingCheck_GTest.cpp
     CrossTuCheckFixture.hpp
     UnusedMemberCheck_GTest.cpp
+    WriteOnlyMemberCheck_GTest.cpp
 )
 target_link_libraries(clang_tools_test
     PRIVATE

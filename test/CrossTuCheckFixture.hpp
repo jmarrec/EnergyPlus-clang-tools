@@ -20,10 +20,6 @@
 
 namespace cross_tu_checks_test {
 
-// Virtual (in-memory) files live under here; only fields declared below
-// sourceRoot are considered, just like --source-root on a real build.
-constexpr auto *sourceRoot = "/fixture/src";
-
 using Names = std::vector<std::string>;
 
 // Hands each TU's AST to the check, as cross_tu_checks' CrossTuAction does.
@@ -46,38 +42,45 @@ struct TranslationUnit {
   std::string code;
 };
 
-// Runs every TU through `check` (headers are shared by all TUs) and returns
-// the sorted qualified names of the members it reports.
-inline Names
-flaggedMembers(cross_tu_checks::CrossTuCheck &check,
-               const std::vector<TranslationUnit> &tus,
-               const clang::tooling::FileContentMappings &headers) {
-  for (const TranslationUnit &tu : tus) {
-    EXPECT_TRUE(clang::tooling::runToolOnCodeWithArgs(
-        std::make_unique<CheckAction>(check), tu.code, {"-std=c++20"}, tu.path,
-        std::string(check.name()),
-        std::make_shared<clang::PCHContainerOperations>(), headers))
-        << tu.path << " failed to compile";
+// Typed fixture: `using FooCheckTest = CrossTuCheckTest<FooCheck>;` then
+// TEST_F(FooCheckTest, ...).
+template <typename Check> class CrossTuCheckTest : public ::testing::Test {
+protected:
+  // Virtual (in-memory) files live under here; only fields declared below it
+  // are considered, just like --source-root on a real build.
+  static const cross_tu_checks::fs::path &sourceRoot() {
+    static const cross_tu_checks::fs::path root{"/fixture/src"};
+    return root;
   }
 
-  Names names;
-  for (const cross_tu_checks::Finding &finding : check.findings()) {
-    names.push_back(finding.field.qualifiedName);
+  // Runs every TU through a fresh Check (headers are shared by all TUs) and
+  // returns the sorted qualified names of the members it reports.
+  static Names
+  flagged(const std::vector<TranslationUnit> &tus,
+          const clang::tooling::FileContentMappings &headers = {}) {
+    Check check{sourceRoot()};
+    for (const TranslationUnit &tu : tus) {
+      EXPECT_TRUE(clang::tooling::runToolOnCodeWithArgs(
+          std::make_unique<CheckAction>(check), tu.code, {"-std=c++20"},
+          tu.path, std::string(check.name()),
+          std::make_shared<clang::PCHContainerOperations>(), headers))
+          << tu.path << " failed to compile";
+    }
+
+    Names names;
+    for (const cross_tu_checks::Finding &finding : check.findings()) {
+      names.push_back(finding.field.qualifiedName);
+    }
+    std::ranges::sort(names);
+    return names;
   }
-  std::sort(names.begin(), names.end());
-  return names;
-}
 
-template <typename Check>
-Names flaggedMembers(const std::vector<TranslationUnit> &tus,
-                     const clang::tooling::FileContentMappings &headers = {}) {
-  Check check{sourceRoot};
-  return flaggedMembers(check, tus, headers);
-}
-
-// A single TU.
-template <typename Check> Names flaggedMembers(const std::string &code) {
-  return flaggedMembers<Check>({{"/fixture/src/main.cc", code}});
-}
+  // A single TU, as <sourceRoot>/main.cc, with no extra headers.
+  static Names flagged(const std::string &code) {
+    const TranslationUnit mainTu{.path = (sourceRoot() / "main.cc").string(),
+                                 .code = code};
+    return flagged({mainTu});
+  }
+};
 
 } // namespace cross_tu_checks_test
