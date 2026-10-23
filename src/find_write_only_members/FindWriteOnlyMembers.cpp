@@ -377,8 +377,13 @@ public:
   }
 
   void recordAggregateAccess(clang::QualType type, Access access) {
-    type = type.getNonReferenceType();
-    const auto *record = type->getAsRecordDecl();
+    recordAggregateAccess(type.getNonReferenceType()->getAsRecordDecl(),
+                          access);
+  }
+
+  // Takes the RecordDecl directly so callers holding one don't need to build a
+  // QualType for it: ASTContext::getRecordType() was removed in LLVM 22.
+  void recordAggregateAccess(const clang::RecordDecl *record, Access access) {
     if (!record) {
       return;
     }
@@ -531,9 +536,8 @@ public:
     if (method && method->isDefaulted() &&
         (method->isCopyAssignmentOperator() ||
          method->isMoveAssignmentOperator())) {
-      findings_.recordAggregateAccess(
-          context_.getRecordType(method->getParent()),
-          Access::Read | Access::Write);
+      findings_.recordAggregateAccess(method->getParent(),
+                                      Access::Read | Access::Write);
     }
     return true;
   }
@@ -543,9 +547,8 @@ public:
     if (method && method->isDefaulted() &&
         (method->isCopyAssignmentOperator() ||
          method->isMoveAssignmentOperator())) {
-      findings_.recordAggregateAccess(
-          context_.getRecordType(method->getParent()),
-          Access::Read | Access::Write);
+      findings_.recordAggregateAccess(method->getParent(),
+                                      Access::Read | Access::Write);
     }
     return true;
   }
